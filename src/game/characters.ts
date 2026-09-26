@@ -11,6 +11,7 @@ import madaraPortrait from '../assets/portraits/madara.jpg';
 import astaPortrait from '../assets/portraits/asta.jpg';
 import { SUKUNA } from './sukuna';
 import { SHADOW_DIO } from './shadowdio';
+import { GOKU_BLACK } from './gokublack';
 import { applyArtDirection } from './artDirection';
 import { installBossKit } from './bossKits';
 
@@ -1037,7 +1038,7 @@ mk({ id: 'denji', name: 'Denji', anime: 'Chainsaw Man', title: 'The Chainsaw Dev
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 380 } }),
 ];
 
-CHARACTERS.push(SUKUNA, SHADOW_DIO);
+CHARACTERS.push(SUKUNA, SHADOW_DIO, GOKU_BLACK);
 applySignatures(CHARACTERS);
 for (const c of CHARACTERS) {
   if (c.id !== 'sukuna' && c.id !== 'gojo') continue;

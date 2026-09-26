@@ -64,6 +64,13 @@ export const TECHNIQUE_PROFILES: Record<string, TechniqueProfile> = {
     awakenDesc: 'Ultra Instinct automatically shifts the body between neutral, side, down, and aerial technique stances.',
     awakenedDesc: 'U → K produces a silver counter-flash that redirects the incoming hit into a concentrated ki blast.',
   },
+  gokublack: {
+    limit: 'Divine Lasso: Judgement', awaken: 'Super Saiyan Rosé', awakened: 'Scythe of Sorrow: Divine Sever',
+    style: 'ki', color: '#ec4899', color2: '#8b5cf6',
+    limitDesc: 'Drives a radiant Ki blade through the foe and detonates a constellation of divine energy needles.',
+    awakenDesc: 'Ascends into Super Saiyan Rosé, enveloping Goku Black in a divine magenta and violet aura.',
+    awakenedDesc: 'U → K manifests the giant Rosé Scythe, carving a dimensional rift that detonates across the arena.',
+  },
   ichigo: {
     limit: 'Mugetsu Manifest', awaken: 'Bankai Manifestation', awakened: 'Final Getsuga: Eternal',
     style: 'spirit', color: '#7a68ff', color2: '#ff315a',
