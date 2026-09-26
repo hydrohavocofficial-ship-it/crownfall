@@ -2,7 +2,7 @@ import { AnimName } from './types';
 import { drawCostume, drawPresence } from './costumes';
 
 export type HairStyle = 'bowl' | 'spikeShort' | 'spikeLong' | 'flame' | 'mane' | 'messy' | 'bald' | 'ponytail' | 'swept' | 'twin'
-  | 'undercut' | 'wolf' | 'bob' | 'crest' | 'heart' | 'dio';
+  | 'undercut' | 'wolf' | 'bob' | 'crest' | 'heart' | 'dio' | 'rose';
 export type Weapon = 'dual' | 'katana' | 'gunbai' | 'greatsword' | 'claws' | 'triple' | 'chainsaw' | 'staff' | 'fists' | 'knife';
 export type Mark = 'none' | 'headband' | 'blindfold' | 'hat' | 'bandana' | 'scar' | 'mask' | 'visor' | 'heartCap';
 
@@ -343,12 +343,66 @@ const HAIR: Record<HairStyle, [number, number, number][]> = {
   // Blond mane swept back off the brow with the long flared tails that make DIO
   // read as DIO at a glance, even at thumbnail size.
   dio: [[-176, 38, 12], [-150, 34, 14], [-122, 29, 15], [-92, 26, 15], [-60, 24, 15], [-26, 22, 14], [10, 19, 14], [46, 16, 13], [80, 12, 12], [110, 9, 10]],
+  // Authentic Super Saiyan Rosé: large flared curved horns with dramatic upward silhouette
+  rose: [[-178, 52, 18], [-152, 60, 20], [-122, 66, 22], [-88, 62, 20], [-52, 52, 18], [-14, 42, 16], [24, 34, 15], [62, 26, 14], [96, 18, 12]],
 };
 /** Styles whose volume is drawn behind the skull rather than over the face. */
-const BACK_HAIR: HairStyle[] = ['mane', 'ponytail', 'twin', 'undercut', 'bob', 'heart', 'dio'];
+const BACK_HAIR: HairStyle[] = ['mane', 'ponytail', 'twin', 'undercut', 'bob', 'heart', 'dio', 'rose'];
 
 function hair(ctx: CanvasRenderingContext2D, hx: number, hy: number, r: number, style: HairStyle, color: string, t: number, sway: number, scaleLen = 1, detailed = true) {
   if (style === 'bald') return;
+  if (style === 'rose') {
+    // Dedicated Toriyama Super Saiyan Rosé hair geometry:
+    // 5 prominent curved swept horns + 3 sharp brow bangs framing the face
+    const horn = (baseX: number, baseY: number, tipX: number, tipY: number, ctrlX: number, ctrlY: number) => {
+      ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
+      ctx.quadraticCurveTo(ctrlX + 6, ctrlY + 8, baseX, baseY);
+    };
+    ctx.beginPath();
+    ctx.moveTo(hx - r * 0.95, hy + r * 0.2);
+    // Horn 1: Low left horn
+    horn(hx - r * 1.25, hy - r * 0.7, hx - r * 2.3 + sway * 0.1, hy - r * 1.8, hx - r * 2.1, hy - r * 0.6);
+    // Horn 2: Swept upper-left horn
+    horn(hx - r * 0.85, hy - r * 1.6, hx - r * 1.7 + sway * 0.08, hy - r * 2.9, hx - r * 1.6, hy - r * 1.9);
+    // Horn 3: Giant crown lock (tallest spike)
+    horn(hx - r * 0.2, hy - r * 1.95, hx - r * 0.65 + sway * 0.05, hy - r * 3.3, hx - r * 0.75, hy - r * 2.4);
+    // Horn 4: Upper right lock
+    horn(hx + r * 0.6, hy - r * 1.6, hx + r * 0.9, hy - r * 2.7, hx + r * 0.55, hy - r * 2.1);
+    // Horn 5: Lateral right lock
+    horn(hx + r * 1.15, hy - r * 0.6, hx + r * 1.8, hy - r * 1.5, hx + r * 1.55, hy - r * 0.9);
+    // Brow bangs framing the forehead:
+    ctx.quadraticCurveTo(hx + r * 0.8, hy - r * 0.35, hx + r * 0.45, hy + r * 0.15);
+    ctx.quadraticCurveTo(hx + r * 0.25, hy - r * 0.45, hx + 1, hy - r * 0.25);
+    ctx.quadraticCurveTo(hx - r * 0.08, hy + r * 0.25, hx - r * 0.35, hy + r * 0.15);
+    ctx.quadraticCurveTo(hx - r * 0.45, hy - r * 0.35, hx - r * 0.65, hy - r * 0.15);
+    ctx.quadraticCurveTo(hx - r * 0.75, hy + r * 0.35, hx - r * 0.95, hy + r * 0.2);
+    ctx.closePath();
+
+    const g = ctx.createLinearGradient(hx - r * 1.5, hy - r * 3.1, hx + r, hy + r);
+    g.addColorStop(0, '#fdf2f8');
+    g.addColorStop(0.25, color);
+    g.addColorStop(0.7, shade(color, 0.85));
+    g.addColorStop(1, shade(color, 0.5));
+    ctx.fillStyle = g; ctx.fill();
+    ctx.lineWidth = 2.2; ctx.strokeStyle = OL; ctx.stroke();
+
+    if (detailed) {
+      ctx.save(); ctx.clip();
+      ctx.strokeStyle = shade(color, 0.45); ctx.lineWidth = 1.8; ctx.beginPath();
+      // Inner spike depth grooves
+      ctx.moveTo(hx - r * 0.7, hy - r * 1.5); ctx.quadraticCurveTo(hx - r * 1.1, hy - r * 2.0, hx - r * 1.5, hy - r * 2.5);
+      ctx.moveTo(hx - r * 0.1, hy - r * 1.7); ctx.quadraticCurveTo(hx - r * 0.4, hy - r * 2.2, hx - r * 0.55, hy - r * 2.8);
+      ctx.moveTo(hx + r * 0.5, hy - r * 1.4); ctx.quadraticCurveTo(hx + r * 0.6, hy - r * 2.0, hx + r * 0.75, hy - r * 2.4);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.lineWidth = 1.5; ctx.beginPath();
+      ctx.moveTo(hx - r * 0.5, hy - r * 2.1); ctx.lineTo(hx - r * 0.4, hy - r * 2.8);
+      ctx.moveTo(hx - r * 1.2, hy - r * 1.8); ctx.lineTo(hx - r * 1.35, hy - r * 2.4);
+      ctx.stroke();
+      ctx.restore();
+    }
+    return;
+  }
   const sp = HAIR[style];
   ctx.beginPath(); ctx.moveTo(hx - r, hy + 1);
   if (style === 'bowl') {
@@ -435,6 +489,22 @@ function drawBackDetails(ctx: CanvasRenderingContext2D, f: any, sh: [number, num
     ctx.strokeStyle = '#8dffb0'; ctx.lineWidth = 2; ctx.globalAlpha = .7; for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sh[0], sh[1]); ctx.quadraticCurveTo(sh[0] + side * 20, sh[1] + 8, sh[0] + side * 13, hipY + 18); ctx.stroke(); } ctx.globalAlpha = 1;
   } else if (id === 'shadowdio') {
     drawDioBack(ctx, sh, hipY, flutter);
+  } else if (id === 'gokublack') {
+    for (const side of [-1, 1]) {
+      ctx.fillStyle = side < 0 ? '#374151' : '#4b5563'; ctx.strokeStyle = OL; ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(sh[0] + side * 4, hipY - 2);
+      ctx.lineTo(sh[0] + side * 16, hipY + 12);
+      ctx.lineTo(sh[0] + side * 22 + flutter * side, hipY + 36);
+      ctx.lineTo(sh[0] + side * 8, hipY + 28);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#dc2626'; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(sh[0] + side * 6, hipY + 4);
+      ctx.lineTo(sh[0] + side * 18 + flutter * side, hipY + 33);
+      ctx.stroke();
+    }
   }
 }
 

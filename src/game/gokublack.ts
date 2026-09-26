@@ -35,7 +35,7 @@ const DIVINE_PURPLE = '#8b5cf6';
 const GI_GRAY = '#374151';
 
 const look: Look = {
-  skin: '#f3d1b0', hair: ROSE_PINK, hair2: '#db2777', hairStyle: 'spikeLong',
+  skin: '#f3d1b0', hair: ROSE_PINK, hair2: '#db2777', hairStyle: 'rose',
   top: GI_GRAY, top2: '#1f2937', sleeve: '#111827', fore: '#f3d1b0', pants: GI_GRAY, boots: '#f3f4f6',
   eye: '#f472b6', weapon: 'katana', mark: 'none',
   energy: ROSE_AURA, energy2: DIVINE_PURPLE, ninjaRun: false,
