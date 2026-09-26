@@ -157,6 +157,29 @@ export const OVERRIDES: Record<string, Override> = {
     nspec: S('Chainsaw Boomerang', 'Hurls a whirling saw disc that tears forward, then grinds its way back.', 'slash', 36, 10, 170,
       (f, g) => { sp(g, f, 'sawDisc', { x: f.x + f.facing * 40, y: f.y - 44, vx: f.facing * 17, w: 76, h: 76, life: 66, rehit: 5, dmg: 3.2, kb: 2.4, ang: 40, sc: 1.2, fx: 'dark' }); sfx('swingH'); }),
   } },
+  gokublack: { zone: true, moves: {
+    nspec: S('Black Kamehameha', 'Fires a concentrated beam of divine Super Saiyan Rosé ki across the entire stage.', 'thrust', 48, 12, 180,
+      (f, g) => {
+        sp(g, f, 'blackKameBeam', { x: f.x + f.facing * 40, y: f.y - 46, life: 34, w: 900, h: 76, rehit: 4, dmg: 3.2, kb: 2.2, ang: 35, sc: 1.2, fx: 'purple', fin: { dmg: 14, ang: 42, kb: 8.6, sc: 8.8 } });
+        sfx('heavyhit'); g.shake(8); g.flashScreen('#ec4899', 0.3);
+      }, { onFrame: charge('#ec4899') }),
+    sspec: S('Divine Lasso', 'Dashes forward with the God Split Cut blade, impaling the target and planting 6 exploding ki needles.', 'thrust', 38, 8, 160,
+      (f, g) => {
+        const t = target(g, f, 580); const tx = t ? t.x : f.x + f.facing * 180, ty = t ? t.y - 40 : f.y - 40;
+        sp(g, f, 'divineLasso', { x: tx, y: ty, life: 32, delay: 0, activeFor: 28, w: 120, h: 100, dmg: 4, kb: 2, sc: 0.5, fx: 'purple', fin: { dmg: 16, ang: 50, kb: 9.0, sc: 9.2 } });
+        sfx('swingH'); g.shake(6);
+      }, { vel: [[0, 0, 0], [4, 22, 0], [18, 2, null]] }),
+    dspec: S('Holy Light Grenade', 'Condenses divine godly ki into an orb that detonates the arena around him.', 'slam', 44, 12, 190,
+      (f, g) => {
+        sp(g, f, 'holyLightGrenade', { x: f.x + f.facing * 50, y: f.y - 40, life: 36, w: 140, h: 140, rehit: 6, dmg: 3, kb: 3, ang: 65, sc: 1.5, fx: 'purple', fin: { dmg: 15, ang: 60, kb: 8.4, sc: 8.8 } });
+        sfx('land'); g.shake(10); g.flashScreen('#8b5cf6', 0.25);
+      }),
+    ult: U('Scythe of Sorrow', 'SCYTHE OF SORROW: WORK OF THE GODS', 'Unsheathes the colossal Rosé Scythe, tearing open a dimensional rift across reality.', 'castUp', 78, 22, 22,
+      (f, g) => {
+        sp(g, f, 'scytheRift', { x: f.x + f.facing * 120, y: f.y - 40, delay: 2, activeFor: 50, life: 64, w: 280, h: 360, rehit: 4, pull: true, dmg: 4.5, stun: 8, kb: 1.5, ang: 50, sc: 0, fx: 'purple', fin: { dmg: 28, ang: 45, kb: 11, sc: 10.5 } });
+        f.godT = 600; g.flashScreen('#ec4899', 0.6); g.shake(30); sfx('ult');
+      }, { onFrame: charge('#ec4899') }),
+  } },
 };
 
 const SIGNATURE_VFX: Record<string, { core: string; ult: string }> = {

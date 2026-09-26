@@ -395,6 +395,191 @@ export const SIGS: Record<string, SigDef> = {
     },
   },
 
+  // ====================== GOKU BLACK — Super Saiyan Rosé Signatures ======================
+  blackKameBeam: {
+    update: (p, g) => {
+      const o = p.owner;
+      if (o.state !== 'attack' || o.moveKey !== 'nspec') p.life = Math.min(p.life, 5);
+      const grow = Math.min(1, p.t / 8), L = 1020 * grow;
+      p.data.L = L;
+      p.x = o.x + p.dir * (36 + L / 2); p.y = o.y - 46; p.w = L; p.h = 76 * Math.min(1, p.life / 8);
+      if (p.t % 3 === 0) g.shake(5);
+      for (let i = 0; i < 4; i++) {
+        g.fx.add({
+          x: o.x + p.dir * (40 + R() * L), y: p.y + (R() - 0.5) * p.h,
+          vx: p.dir * 8, vy: (R() - 0.5) * 3,
+          color: R() < 0.4 ? '#f472b6' : R() < 0.7 ? '#8b5cf6' : '#ffffff',
+          kind: 'streak', life: 14, size: 2.5,
+        });
+      }
+    },
+    draw: (p, ctx, t) => {
+      const o = p.owner, L = p.data.L || 0, h = Math.max(2, p.h), x0 = o.x + p.dir * 32, y = p.y;
+      ctx.globalCompositeOperation = 'lighter';
+      const layers: [number, string][] = [
+        [2.2, 'rgba(126, 34, 206, 0.35)'],
+        [1.6, 'rgba(217, 70, 239, 0.55)'],
+        [1.0, 'rgba(244, 114, 182, 0.85)'],
+        [0.45, 'rgba(255, 255, 255, 0.98)']
+      ];
+      for (const [k, c] of layers) {
+        ctx.fillStyle = c; ctx.beginPath();
+        const hh = h * k * 0.5, steps = 28;
+        for (let i = 0; i <= steps; i++) {
+          const xx = x0 + p.dir * L * i / steps;
+          ctx.lineTo(xx, y - hh - Math.sin(t * 0.7 + i * 1.2) * hh * 0.15);
+        }
+        for (let i = steps; i >= 0; i--) {
+          const xx = x0 + p.dir * L * i / steps;
+          ctx.lineTo(xx, y + hh + Math.sin(t * 0.7 + i * 1.4) * hh * 0.15);
+        }
+        ctx.closePath(); ctx.fill();
+      }
+      glow(ctx, x0, y, h * 1.5, '#ec4899', 1);
+      glow(ctx, x0 + p.dir * L, y, h * 1.4, '#8b5cf6', 0.9);
+      ctx.strokeStyle = '#e879f9'; ctx.lineWidth = 2; ctx.beginPath();
+      for (let i = 0; i <= 20; i++) {
+        const xx = x0 + p.dir * (L * i / 20);
+        const yy = y + Math.sin(t * 0.8 + i * 1.5) * (h * 0.45);
+        if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+    },
+  },
+
+  divineLasso: {
+    init: (p) => {
+      p.data.needles = [];
+      for (let i = 0; i < 7; i++) {
+        p.data.needles.push({
+          ox: (R() - 0.5) * 50, oy: -30 + (R() - 0.5) * 50,
+          ang: (R() - 0.5) * 0.6 + (p.dir > 0 ? 0.3 : Math.PI - 0.3),
+          len: 42 + R() * 20,
+        });
+      }
+    },
+    update: (p, g) => {
+      if (p.t === 1) { sfx('swingH'); g.shake(4); }
+      if (p.t === 22) {
+        g.shake(16);
+        g.flashScreen('#ec4899', 0.45);
+        sfx('heavyhit', 2);
+        for (let i = 0; i < 30; i++) {
+          const a = R() * TAU;
+          g.fx.add({
+            x: p.x, y: p.y,
+            vx: Math.cos(a) * (5 + R() * 12), vy: Math.sin(a) * (5 + R() * 12),
+            color: R() < 0.5 ? '#f472b6' : '#c084fc',
+            kind: 'streak', life: 24, size: 4,
+          });
+        }
+      }
+    },
+    draw: (p, ctx, t) => {
+      const a = fade(p, 6);
+      ctx.save(); ctx.translate(p.x, p.y);
+      const detonated = p.t >= 22;
+      if (!detonated) {
+        ctx.globalCompositeOperation = 'lighter';
+        const vib = Math.sin(p.t * 0.8) * 2;
+        for (const n of (p.data.needles || [])) {
+          ctx.save(); ctx.translate(n.ox + vib, n.oy); ctx.rotate(n.ang);
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.2;
+          ctx.beginPath(); ctx.moveTo(-n.len * 0.5, 0); ctx.lineTo(n.len * 0.5, 0); ctx.stroke();
+          ctx.strokeStyle = '#ec4899'; ctx.lineWidth = 5.5; ctx.stroke();
+          ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 9; ctx.globalAlpha = 0.5 * a; ctx.stroke();
+          ctx.restore();
+        }
+      } else {
+        const progress = Math.min(1, (p.t - 22) / 10);
+        const rad = progress * 140;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = hexA('#ec4899', 1 - progress); ctx.lineWidth = 6 * (1 - progress);
+        ctx.beginPath(); ctx.arc(0, 0, rad, 0, TAU); ctx.stroke();
+        ctx.strokeStyle = hexA('#ffffff', 1 - progress); ctx.lineWidth = 3 * (1 - progress);
+        ctx.beginPath(); ctx.arc(0, 0, rad * 0.8, 0, TAU); ctx.stroke();
+      }
+      ctx.restore();
+    },
+  },
+
+  holyLightGrenade: {
+    update: (p, g) => {
+      if (p.t % 3 === 0) g.shake(2);
+      g.fx.add({
+        x: p.x + (R() - 0.5) * p.w, y: p.y + (R() - 0.5) * p.h,
+        vx: (R() - 0.5) * 4, vy: -1 - R() * 3,
+        color: R() < 0.5 ? '#f472b6' : '#a855f7',
+        kind: 'glow', life: 16, size: 4,
+      });
+    },
+    draw: (p, ctx, t) => {
+      const a = fade(p);
+      ctx.save(); ctx.translate(p.x, p.y);
+      ctx.globalCompositeOperation = 'lighter';
+      const pulse = Math.sin(t * 0.2) * 6;
+      const r = p.w * 0.45 + pulse;
+      glow(ctx, 0, 0, r * 1.8, '#ec4899', 0.9 * a);
+      glow(ctx, 0, 0, r * 1.1, '#8b5cf6', 0.8 * a);
+      for (let i = 0; i < 3; i++) {
+        ctx.strokeStyle = i % 2 ? '#f472b6' : '#ffffff'; ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * 1.3, r * 0.4, t * 0.15 + i * 1.05, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+  },
+
+  scytheRift: {
+    init: (p) => {
+      p.data.cracks = [];
+      for (let i = 0; i < 9; i++) {
+        p.data.cracks.push({
+          y: -140 + i * 35,
+          len: 50 + R() * 70,
+          ang: (R() - 0.5) * 0.8,
+        });
+      }
+    },
+    update: (p, g) => {
+      g.shake(3);
+      if (p.t % 3 === 0) {
+        g.fx.add({
+          x: p.x + (R() - 0.5) * 40, y: p.y - 150 + R() * 300,
+          vx: (R() - 0.5) * 8, vy: (R() - 0.5) * 8,
+          color: R() < 0.3 ? '#ffffff' : R() < 0.7 ? '#ec4899' : '#581c87',
+          kind: 'streak', life: 20, size: 4,
+        });
+      }
+    },
+    draw: (p, ctx, t) => {
+      const a = fade(p, 12);
+      ctx.save(); ctx.translate(p.x, p.y);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#05020a';
+      ctx.beginPath();
+      ctx.moveTo(0, -180);
+      ctx.quadraticCurveTo(24 + Math.sin(t * 0.3) * 8, 0, 0, 180);
+      ctx.quadraticCurveTo(-24 - Math.sin(t * 0.3) * 8, 0, 0, -180);
+      ctx.fill();
+
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = '#ec4899'; ctx.lineWidth = 6; ctx.stroke();
+      ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 14; ctx.globalAlpha = 0.5 * a; ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.2; ctx.globalAlpha = 1; ctx.stroke();
+
+      for (const c of (p.data.cracks || [])) {
+        ctx.strokeStyle = '#f472b6'; ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(0, c.y);
+        ctx.lineTo(Math.cos(c.ang) * c.len, c.y + Math.sin(c.ang) * c.len);
+        ctx.stroke();
+      }
+      ctx.restore();
+    },
+  },
+
   // ====================== ICHIGO — Getsuga Tenshou (bankai) ======================
   getsugaBig: {
     draw: (p, ctx) => {

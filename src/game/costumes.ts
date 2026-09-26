@@ -181,12 +181,33 @@ export function drawCostume(c: CanvasRenderingContext2D, id: string, look: Look,
       line(c, [[x + 12, y + 7], [x + 14, y + 11]], '#d489e0', 1.4);
       break;
     }
+    case 'gokublack': {
+      // High-neck charcoal Kai undershirt:
+      panel(c, [[x - 8, y - 5], [x + 8, y - 5], [x + 6, y + 5], [x - 6, y + 5]], '#181d27', '#0f131a');
+      // Sleeveless gray Kaioshin overcoat:
+      panel(c, [[x - 12, y - 1], [x - 5, y + 11], [-7, hip - 2], [-11, hip + 8 + flow], [x - 13, y + 4]], '#374151', '#1f2937');
+      panel(c, [[x + 12, y - 1], [x + 5, y + 11], [7, hip - 2], [11, hip + 8 + flow], [x + 13, y + 4]], '#4b5563', '#1f2937');
+      // Red sash tied around the waist with fluttering ends:
+      panel(c, [[-11, hip - 4], [11, hip - 4], [11, hip + 3], [-11, hip + 3]], '#dc2626', '#991b1b');
+      line(c, [[-2, hip + 2], [-6 + flow * 1.5, hip + 22]], '#dc2626', 3.5);
+      line(c, [[2, hip + 2], [6 + flow, hip + 18]], '#b91c1c', 2.5);
+      // Green Potara earring on his left ear:
+      line(c, [[hx - 8, hy + 2], [hx - 9, hy + 5]], '#eab308', 1.8);
+      disc(c, hx - 9, hy + 7, 2.4, '#22c55e');
+      disc(c, hx - 9.5, hy + 6.5, 0.9, '#ffffff');
+      // Glowing Rosé eye gleam:
+      if (empowered) {
+        disc(c, hx + 4, hy - 1, 1.3, '#f472b6');
+        disc(c, hx + 4, hy - 1, 0.7, '#ffffff');
+      }
+      break;
+    }
   }
   c.restore();
 }
 
 export function drawPresence(c: CanvasRenderingContext2D, id: string, look: Look, time: number, powered: boolean, attacking: boolean) {
-  const boss = id === 'sukuna' || id === 'gojo' || id === 'shadowdio';
+  const boss = id === 'sukuna' || id === 'gojo' || id === 'shadowdio' || id === 'gokublack';
   if (!boss && !powered && !attacking) return;
   c.save(); c.globalAlpha *= powered ? .55 : attacking ? .32 : .17;
   c.strokeStyle = look.energy; c.lineWidth = 1.2;
@@ -194,7 +215,6 @@ export function drawPresence(c: CanvasRenderingContext2D, id: string, look: Look
     for (let i = 0; i < 3; i++) { c.beginPath(); c.ellipse(0, -44, 32 + i * 4, 47, Math.sin(time * .018 + i) * .5, i + time * .018, i + time * .018 + 3.8); c.stroke(); }
     for (let i = 0; i < 7; i++) disc(c, Math.sin(i * 2.4 + time * .02) * 40, -44 + Math.cos(i * 2.4 + time * .02) * 53, 1.2, i % 2 ? '#8deaff' : '#ddc0ff');
   } else if (id === 'sukuna') {
-    // Cursed-energy presence: orbiting motes only. No trailing shapes behind him.
     for (let i = 0; i < 9; i++) {
       const a = time * .022 + i * (TAU / 9), r = 27 + (i % 3) * 5;
       const x = Math.cos(a) * r, y = -46 + Math.sin(a) * (r + 12);
@@ -203,7 +223,6 @@ export function drawPresence(c: CanvasRenderingContext2D, id: string, look: Look
     }
     c.globalAlpha = 1;
   } else if (id === 'shadowdio') {
-    // Clock-hand motes: the visual signature of stopped time.
     for (let i = 0; i < 6; i++) {
       const a = time * (i % 2 ? .03 : -.022) + i * (TAU / 6);
       const r = 24 + (i % 3) * 7;
@@ -212,6 +231,27 @@ export function drawPresence(c: CanvasRenderingContext2D, id: string, look: Look
       disc(c, px, py, 1.1 + (i % 2) * .6, i % 3 ? '#8affd0' : '#ffe45c');
       c.strokeStyle = i % 3 ? '#8affd0' : '#ffe45c'; c.lineWidth = .8;
       c.beginPath(); c.moveTo(px, py); c.lineTo(px - Math.cos(a) * 4, py - Math.sin(a) * 4); c.stroke();
+    }
+    c.globalAlpha = 1;
+  } else if (id === 'gokublack') {
+    // Super Saiyan Rosé Godly Aura Presence:
+    // Orbiting divine stardust motes and crackling violet lightning sparks
+    const pulse = Math.sin(time * 0.15) * 4;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU + time * 0.035;
+      const r = 28 + (i % 3) * 7 + pulse;
+      const fx = Math.cos(a) * r, fy = -44 + Math.sin(a) * (r + 14);
+      c.globalAlpha = (i % 2 ? 0.6 : 0.95) * (0.5 + Math.sin(a * 2) * 0.3);
+      disc(c, fx, fy, 1.8 + (i % 2) * 1.2, i % 2 ? '#f472b6' : '#a855f7');
+    }
+    for (let i = 0; i < 3; i++) {
+      const lx = Math.sin(time * 0.2 + i * 2.2) * 34;
+      const ly = -46 + Math.cos(time * 0.25 + i * 2.2) * 46;
+      c.strokeStyle = '#e879f9'; c.lineWidth = 1.3;
+      c.beginPath();
+      c.moveTo(lx, ly);
+      c.lineTo(lx + (Math.sin(time + i) * 14), ly + (Math.cos(time + i) * 14));
+      c.stroke();
     }
     c.globalAlpha = 1;
   } else {

@@ -1265,6 +1265,35 @@ function drawWeapon(ctx: CanvasRenderingContext2D, type: Weapon, hand: [number, 
     ctx.strokeStyle = '#2f3340'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x - dx * 4, y - dy * 4); ctx.lineTo(x + dx * 3, y + dy * 3); ctx.stroke();
     return [tx, ty];
   }
+  if (f?.def?.id === 'gokublack') {
+    // God Split Cut (Super Saiyan Rosé Ki Blade)
+    const len = 58;
+    const tx = x + dx * len, ty = y + dy * len;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.45)';
+    ctx.lineWidth = 14;
+    ctx.beginPath(); ctx.moveTo(x - dx * 4, y - dy * 4); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.strokeStyle = '#ec4899';
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.8;
+    ctx.beginPath(); ctx.moveTo(x + dx * 2, y + dy * 2); ctx.lineTo(tx, ty); ctx.stroke();
+    const flare = ctx.createRadialGradient(tx, ty, 0, tx, ty, 12);
+    flare.addColorStop(0, '#ffffff');
+    flare.addColorStop(0.4, '#ec4899');
+    flare.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = flare; ctx.beginPath(); ctx.arc(tx, ty, 12, 0, 7); ctx.fill();
+    for (let i = 1; i <= 4; i++) {
+      const px = x + dx * (i * 12) + nx * (Math.sin(time * 0.3 + i) * 5);
+      const py = y + dy * (i * 12) + ny * (Math.sin(time * 0.3 + i) * 5);
+      ctx.fillStyle = i % 2 ? '#f472b6' : '#c084fc';
+      ctx.beginPath(); ctx.arc(px, py, 2, 0, 7); ctx.fill();
+    }
+    ctx.restore();
+    return [tx, ty];
+  }
   if (type === 'katana') {
     const t = blade(48, 3.2, '#f4f6fa', f.look.energy);
     ctx.fillStyle = '#c8442a'; ctx.strokeStyle = OL; ctx.lineWidth = 1.5;
