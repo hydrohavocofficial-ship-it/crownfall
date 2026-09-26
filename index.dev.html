@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07070d" />
+    <meta name="description" content="Shōnen Brawl — a standalone anime platform fighting game." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23090912'/%3E%3Cpath d='M11 45 29 10h9L25 45zm22 0 18-35h5L39 45z' fill='%23ffb52e'/%3E%3C/svg%3E" />
+    <title>Shōnen Brawl — Anime Platform Fighter</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import { injectIntoGlobalHook } from "/@react-refresh";
+      injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {};
+      window.$RefreshSig$ = () => (type) => type;
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

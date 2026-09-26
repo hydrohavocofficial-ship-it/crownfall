@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Bangers";
+  src: url("./assets/fonts/Bangers-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rajdhani";
+  src: url("./assets/fonts/Rajdhani-Medium.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rajdhani";
+  src: url("./assets/fonts/Rajdhani-SemiBold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rajdhani";
+  src: url("./assets/fonts/Rajdhani-Bold.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@theme {
+  --font-display: "Bangers", Impact, sans-serif;
+  --font-ui: "Rajdhani", "Segoe UI", sans-serif;
+}
+
+html, body, #root { height: 100%; margin: 0; background: #07070d; overflow: hidden; }
+body { font-family: var(--font-ui); color: #fff; user-select: none; }
+
+.font-display { font-family: var(--font-display); letter-spacing: 0.04em; }
+.text-stroke { -webkit-text-stroke: 2px #000; paint-order: stroke fill; }
+.text-shadow-hard { text-shadow: 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+
+@keyframes slowzoom { 0% { transform: scale(1.05) translate(0,0); } 50% { transform: scale(1.15) translate(-1.5%, -1%); } 100% { transform: scale(1.05) translate(0,0); } }
+.anim-slowzoom { animation: slowzoom 30s ease-in-out infinite; }
+
+@keyframes speedlines { from { background-position: 0 0; } to { background-position: -600px 0; } }
+.speedlines {
+  background-image: repeating-linear-gradient(100deg, transparent 0 40px, rgba(255,255,255,0.05) 40px 42px, transparent 42px 95px, rgba(255,255,255,0.08) 95px 96px);
+  background-size: 600px 100%;
+  animation: speedlines 1.2s linear infinite;
+}
+
+@keyframes floaty { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+.anim-float { animation: floaty 3.5s ease-in-out infinite; }
+
+@keyframes slideInL { from { opacity: 0; transform: translateX(-60px) skewX(-12deg); } to { opacity: 1; transform: translateX(0) skewX(-12deg); } }
+.anim-slide-l { animation: slideInL 0.45s cubic-bezier(.2,.9,.3,1.2) both; }
+
+@keyframes popIn { 0% { opacity: 0; transform: scale(0.6) rotate(-4deg); } 70% { transform: scale(1.06) rotate(1deg); } 100% { opacity: 1; transform: scale(1) rotate(0); } }
+.anim-pop { animation: popIn 0.5s cubic-bezier(.2,.9,.3,1.2) both; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.anim-fade-up { animation: fadeUp 0.5s ease both; }
+
+@keyframes shine { 0% { transform: translateX(-150%) skewX(-20deg); } 100% { transform: translateX(250%) skewX(-20deg); } }
+.shine::after { content: ""; position: absolute; inset: 0; width: 40%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent); animation: shine 2.8s ease-in-out infinite; pointer-events: none; }
+
+@keyframes pulseGlow { 0%,100% { box-shadow: 0 0 10px var(--glow, #ff4757), 0 0 0 rgba(0,0,0,0); } 50% { box-shadow: 0 0 28px var(--glow, #ff4757), 0 0 6px var(--glow, #ff4757); } }
+.anim-glow { animation: pulseGlow 1.8s ease-in-out infinite; }
+
+@keyframes loadbar { from { width: 0%; } to { width: 100%; } }
+
+@keyframes ember { 0% { transform: translateY(0) scale(1); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-110vh) scale(0.4); opacity: 0; } }
+.ember { position: absolute; bottom: -10px; border-radius: 9999px; animation: ember linear infinite; }
+
+.skew-panel { transform: skewX(-12deg); }
+.unskew { transform: skewX(12deg); }
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+input[type=range] { accent-color: #ff4757; }

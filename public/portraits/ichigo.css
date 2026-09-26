@@ -1,0 +1,14 @@
+/* CSS-only anime-style character portrait for Ichigo */
+.ichigo-portrait {
+  background: linear-gradient(160deg, #ff6a1a 0%, #7a1e00 50%, #0a0a0e 100%);
+  position: relative; overflow: hidden;
+}
+.ichigo-portrait .hair { position: absolute; top: 0; left: 15px; width: 150px; height: 130px; background: linear-gradient(170deg, #ffb335 10%, #8a4e14 45%, #3a1e05 100%); border-radius: 45% 45% 15% 15%; clip-path: polygon(0 20%, 15% 0, 40% 5%, 65% 0, 85% 10%, 100% 30%, 100% 60%, 85% 100%, 60% 90%, 35% 100%, 10% 90%, 0 70%); }
+.ichigo-portrait .bangs { position: absolute; top: 18px; left: 42px; width: 90px; height: 42px; background: #ffb335; border-radius: 30% 30% 20% 20%; clip-path: polygon(0 0, 100% 0, 90% 100%, 50% 60%, 10% 100%); }
+.ichigo-portrait .face { position: absolute; top: 70px; left: 38px; width: 105px; height: 110px; background: #f4d6bc; border-radius: 42% 42% 50% 50%; box-shadow: inset -12px -6px 14px rgba(0,0,0,0.1); }
+.ichigo-portrait .eye { position: absolute; top: 50px; left: 52px; width: 10px; height: 12px; background: #d99a2a; border-radius: 50% 50% 60% 60%; border: 1px solid #8a3c08; }
+.ichigo-portrait .eye.right { left: 94px; }
+.ichigo-portrait .smirk { position: absolute; top: 102px; left: 56px; width: 30px; height: 14px; border-bottom: 2.5px solid #9a6a48; border-radius: 0 0 60% 40%; transform: rotate(-3deg); }
+.ichigo-portrait .coat { position: absolute; bottom: 0; left: 20px; width: 140px; height: 100px; background: linear-gradient(160deg, #0d0d14 20%, #1a1010 75%, #2a1820 100%); border-radius: 30% 30% 15% 15%; }
+.ichigo-portrait .sword-glow { position: absolute; top: 28%; right: 8%; width: 6px; height: 120px; background: linear-gradient(180deg, #1a0c3a, #3a1a6a, transparent); border-radius: 3px; filter: blur(2px); opacity: 0.85; animation: pulse-glow 1.5s ease-in-out infinite; }
+@keyframes pulse-glow { 0%,100% { opacity: 0.7; } 50% { opacity: 1; } }
