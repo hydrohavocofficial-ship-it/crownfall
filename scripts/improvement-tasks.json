@@ -106,7 +106,8 @@
       "src/game/audioAura.ts"
     ],
     "description": "Create layered impact audio with a low thump, mid crack, high shimmer, and character-specific tone. Add pitch variation, stereo panning, and a reverb tail for arena impacts. Include aura activation, super charge, and hitstop sound stingers. Ensure audio pools are reused, volume ducks on critical hits, and no clipping occurs.",
-    "status": "pending"
+    "status": "completed",
+    "completedAt": "2026-09-26T14:47:26.185Z"
   },
   {
     "id": "balance-advantage-system",
@@ -117,6 +118,42 @@
       "src/game/recoveryAudit.ts"
     ],
     "description": "Introduce advantage scoring for startup, active, recovery, and cancel windows. Tune recovery after block, whiff, and hit based on frame advantage and meter. Add a debug overlay showing advantage frames, and validate that no character has unsafe recovery longer than 12 frames on normal attacks and 18 frames on specials.",
+    "status": "failed",
+    "failedReason": "No valid code blocks found."
+  },
+  {
+    "id": "vfx-screen-distortion",
+    "title": "Impact Screen Distortion and Chromatic Aberration System",
+    "category": "visual_juice",
+    "targetFiles": [
+      "src/game/effects/screenDistortion.ts",
+      "src/render/camera.ts"
+    ],
+    "description": "Implement high-impact screen distortion for heavy hits, supers, and parries. Use radial distortion, chromatic aberration, and brief flash layers that scale with damage, combo multiplier, and character impact weight. Integrate with existing cinematic zoom and hitstop so the distortion peaks during the freeze frame and decays smoothly into camera shake. Add per-character intensity modifiers so Broly, Kizaru, and Rimuru feel visually distinct without breaking readability.",
+    "status": "completed",
+    "completedAt": "2026-09-26T14:58:27.513Z"
+  },
+  {
+    "id": "char-goku",
+    "title": "Goku Ultra Instinct Character Kit",
+    "category": "new_character",
+    "targetFiles": [
+      "src/game/characters/goku.ts",
+      "src/game/data/gokuMoves.ts"
+    ],
+    "description": "Add Goku as a new playable anime fighter with a balanced neutral game, strong mobility, and a high-risk Ultra Instinct super. Include at least 5 normal attacks, 2 specials, 1 super, and a unique aura layer that shifts from base orange to silver-white during Ultra Instinct. Define clear hitboxes, startup, active, and recovery frames, and add visual requirements such as speed lines, delayed hit sparks, and a short invulnerability window that must be readable in frame data.",
+    "status": "failed",
+    "failedReason": "No valid code blocks found."
+  },
+  {
+    "id": "balance-super-meter",
+    "title": "Super Meter Gain and Recovery Advantage Audit",
+    "category": "balance",
+    "targetFiles": [
+      "src/game/balance/superMeter.ts",
+      "src/game/balance/advantageSystem.ts"
+    ],
+    "description": "Audit and tune super meter gain, meter loss, and recovery advantage across all completed characters. Ensure meter is awarded for landing hits, blocking, dodging, and successful counters, but not so frequently that supers become spammy. Add a recovery advantage table that defines safe punish windows after whiffs, blocked attacks, and super misses. Validate that Kizaru, Broly, Rimuru, and any new characters do not create broken advantage chains when combined with the existing balance-recovery-audit system.",
     "status": "pending"
   }
 ]
