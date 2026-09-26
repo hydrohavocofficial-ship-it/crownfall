@@ -1,0 +1,58 @@
+[
+  {
+    "id": "vfx-hitstop",
+    "title": "Add Hitstop Freeze-Frames for Heavy Impact Feel",
+    "category": "visual_juice",
+    "targetFiles": ["src/game/fighter.ts", "src/game/game.ts"],
+    "description": "Implement hitstop / impact freeze (3-6 frame pause on heavy attacks and counter-hits) to make melee strikes feel meaty and visceral like AAA 2D fighters.",
+    "status": "pending"
+  },
+  {
+    "id": "vfx-camera-shake",
+    "title": "Dynamic Camera Zoom and Screen Vignette on Ultimates",
+    "category": "visual_juice",
+    "targetFiles": ["src/game/game.ts", "src/game/render.ts"],
+    "description": "Add dynamic camera zoom-in and radial screen vignette darkening during cinematic Ultimate activations.",
+    "status": "pending"
+  },
+  {
+    "id": "vfx-clash-sparks",
+    "title": "Clash Particle Shockwaves on Simultaneous Hitbox Collisions",
+    "category": "visual_juice",
+    "targetFiles": ["src/game/game.ts", "src/game/effects.ts"],
+    "description": "Spawn radial anime shockwaves and high-contrast clash sparks when two attacks collide simultaneously.",
+    "status": "pending"
+  },
+  {
+    "id": "char-kizaru",
+    "title": "Implement Kizaru / Borsalino (Light-Speed Fruit Fighter)",
+    "category": "new_character",
+    "targetFiles": ["src/game/kizaru.ts", "src/game/characters.ts", "src/game/techniques.ts"],
+    "description": "Author Kizaru (Borsalino) from One Piece with Pika Pika no Mi powers: light-speed kicks, Ama no Murakumo light sword slashes, Yasakani no Magatama mirror barrage, and Yata no Kagami teleport.",
+    "status": "pending"
+  },
+  {
+    "id": "char-broly",
+    "title": "Implement Broly (Legendary Super Saiyan Brawler)",
+    "category": "new_character",
+    "targetFiles": ["src/game/broly.ts", "src/game/characters.ts", "src/game/techniques.ts"],
+    "description": "Author Broly from Dragon Ball Super: hulking heavy armor, green wrathful ki aura, Eraser Cannon, Gigantic Roar, armored command grapples, and screen-shattering seismic slams.",
+    "status": "pending"
+  },
+  {
+    "id": "char-rimuru",
+    "title": "Implement Rimuru Tempest (Demon Lord Slime)",
+    "category": "new_character",
+    "targetFiles": ["src/game/rimuru.ts", "src/game/characters.ts", "src/game/techniques.ts"],
+    "description": "Author Rimuru Tempest from Tensura: Gluttony / Beelzebuth devour vortex, Megiddo water satellite lasers, Dark Flame / Hell Flare orbs, slime shape-shifting dashes, and sword cuts.",
+    "status": "pending"
+  },
+  {
+    "id": "balance-recovery-audit",
+    "title": "Roster Recovery & Frame Advantage Audit",
+    "category": "balance",
+    "targetFiles": ["src/game/characters.ts"],
+    "description": "Audit frame advantage across all fighters so recovery frames allow proper hit confirmation without inescapable infinite strings.",
+    "status": "pending"
+  }
+]
