@@ -3,56 +3,120 @@
     "id": "vfx-hitstop",
     "title": "Add Hitstop Freeze-Frames for Heavy Impact Feel",
     "category": "visual_juice",
-    "targetFiles": ["src/game/fighter.ts", "src/game/game.ts"],
+    "targetFiles": [
+      "src/game/fighter.ts",
+      "src/game/game.ts"
+    ],
     "description": "Implement hitstop / impact freeze (3-6 frame pause on heavy attacks and counter-hits) to make melee strikes feel meaty and visceral like AAA 2D fighters.",
-    "status": "pending"
+    "status": "completed",
+    "completedAt": "2026-09-26T14:01:41.907Z"
   },
   {
     "id": "vfx-camera-shake",
     "title": "Dynamic Camera Zoom and Screen Vignette on Ultimates",
     "category": "visual_juice",
-    "targetFiles": ["src/game/game.ts", "src/game/render.ts"],
+    "targetFiles": [
+      "src/game/game.ts",
+      "src/game/render.ts"
+    ],
     "description": "Add dynamic camera zoom-in and radial screen vignette darkening during cinematic Ultimate activations.",
-    "status": "pending"
+    "status": "failed",
+    "failedReason": "\u001b[31m✗\u001b[39m Build failed in 513ms\n\u001b[31merror during build:\n\u001b[31m[vite:esbuild] Transform failed with 1 error:\nC:/Users/javan/Downloads/game/src/game/game.ts:1:0: ERROR: Unexpected \"<<\"\u001b[31m\nfile: \u001b[36mC:/Users/javan/Downloads/game/src/game/game.ts:1:0\u001b[31m\n\u001b[33m\n\u001b[33mUnexpected \"<<\"\u001b[33m\n1  |  <<<<<<< SEARCH\n   |  ^\n2  |    slashGate = new Map<Fighter, { frame: number; tier: 'light' | 'strong' }>();\n3  |  \n\u001b[31m\n    at failureErrorWithLog (C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:1752:15)\n    at C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:1019:50\n    at responseCallbacks.<computed> (C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:886:9)\n    at handleIncomingPacket (C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:941:12)\n    at Socket.readFromStdout (C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:864:7)\n    at Socket.emit (node:events:524:28)\n    at addChunk (node:internal/streams/readable:561:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n    at Readable.push (node:internal/streams/readable:392:5)\n    at Pipe.onStreamRead (node:internal/stream_base_commons:191:23)\u001b[39m\n"
   },
   {
     "id": "vfx-clash-sparks",
     "title": "Clash Particle Shockwaves on Simultaneous Hitbox Collisions",
     "category": "visual_juice",
-    "targetFiles": ["src/game/game.ts", "src/game/effects.ts"],
+    "targetFiles": [
+      "src/game/game.ts",
+      "src/game/effects.ts"
+    ],
     "description": "Spawn radial anime shockwaves and high-contrast clash sparks when two attacks collide simultaneously.",
-    "status": "pending"
+    "status": "failed",
+    "failedReason": "\u001b[31m✗\u001b[39m Build failed in 614ms\n\u001b[31merror during build:\n\u001b[31m[vite:esbuild] Transform failed with 1 error:\nC:/Users/javan/Downloads/game/src/game/effects.ts:1:0: ERROR: Unexpected \"<<\"\u001b[31m\nfile: \u001b[36mC:/Users/javan/Downloads/game/src/game/effects.ts:1:0\u001b[31m\n\u001b[33m\n\u001b[33mUnexpected \"<<\"\u001b[33m\n1  |  <<<<<<< SEARCH\n   |  ^\n2  |  ...\n3  |  \n\u001b[31m\n    at failureErrorWithLog (C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:1752:15)\n    at C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:1019:50\n    at responseCallbacks.<computed> (C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:886:9)\n    at handleIncomingPacket (C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:941:12)\n    at Socket.readFromStdout (C:\\Users\\javan\\Downloads\\game\\node_modules\\esbuild\\lib\\main.js:864:7)\n    at Socket.emit (node:events:524:28)\n    at addChunk (node:internal/streams/readable:561:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n    at Readable.push (node:internal/streams/readable:392:5)\n    at Pipe.onStreamRead (node:internal/stream_base_commons:191:23)\u001b[39m\n"
   },
   {
     "id": "char-kizaru",
     "title": "Implement Kizaru / Borsalino (Light-Speed Fruit Fighter)",
     "category": "new_character",
-    "targetFiles": ["src/game/kizaru.ts", "src/game/characters.ts", "src/game/techniques.ts"],
+    "targetFiles": [
+      "src/game/kizaru.ts",
+      "src/game/characters.ts",
+      "src/game/techniques.ts"
+    ],
     "description": "Author Kizaru (Borsalino) from One Piece with Pika Pika no Mi powers: light-speed kicks, Ama no Murakumo light sword slashes, Yasakani no Magatama mirror barrage, and Yata no Kagami teleport.",
-    "status": "pending"
+    "status": "failed",
+    "failedReason": "No valid code blocks found."
   },
   {
     "id": "char-broly",
     "title": "Implement Broly (Legendary Super Saiyan Brawler)",
     "category": "new_character",
-    "targetFiles": ["src/game/broly.ts", "src/game/characters.ts", "src/game/techniques.ts"],
+    "targetFiles": [
+      "src/game/broly.ts",
+      "src/game/characters.ts",
+      "src/game/techniques.ts"
+    ],
     "description": "Author Broly from Dragon Ball Super: hulking heavy armor, green wrathful ki aura, Eraser Cannon, Gigantic Roar, armored command grapples, and screen-shattering seismic slams.",
-    "status": "pending"
+    "status": "failed",
+    "failedReason": "No valid code blocks found."
   },
   {
     "id": "char-rimuru",
     "title": "Implement Rimuru Tempest (Demon Lord Slime)",
     "category": "new_character",
-    "targetFiles": ["src/game/rimuru.ts", "src/game/characters.ts", "src/game/techniques.ts"],
+    "targetFiles": [
+      "src/game/rimuru.ts",
+      "src/game/characters.ts",
+      "src/game/techniques.ts"
+    ],
     "description": "Author Rimuru Tempest from Tensura: Gluttony / Beelzebuth devour vortex, Megiddo water satellite lasers, Dark Flame / Hell Flare orbs, slime shape-shifting dashes, and sword cuts.",
-    "status": "pending"
+    "status": "failed",
+    "failedReason": "No valid code blocks found."
   },
   {
     "id": "balance-recovery-audit",
     "title": "Roster Recovery & Frame Advantage Audit",
     "category": "balance",
-    "targetFiles": ["src/game/characters.ts"],
+    "targetFiles": [
+      "src/game/characters.ts"
+    ],
     "description": "Audit frame advantage across all fighters so recovery frames allow proper hit confirmation without inescapable infinite strings.",
+    "status": "failed",
+    "failedReason": "No valid code blocks found."
+  },
+  {
+    "id": "vfx-cinematic-zoom",
+    "title": "Cinematic Zoom and Screen Distortion for Critical Hits",
+    "category": "visual_juice",
+    "targetFiles": [
+      "src/game/vfxCinematicCamera.ts",
+      "src/game/vfxScreenDistortion.ts"
+    ],
+    "description": "Add director-style camera zoom on critical hits, super meter activation, and finishers. Implement smooth lerp to zoom 1.15-1.35 with punch-in on impact, subtle fisheye distortion, radial chromatic aberration, and a brief white flash. Ensure the zoom resets after 0.35 seconds and does not conflict with hitstop or camera shake.",
+    "status": "failed",
+    "failedReason": "No valid code blocks found."
+  },
+  {
+    "id": "audio-impact-layer",
+    "title": "Layered Audio Impact and Aura Sound Design",
+    "category": "audio",
+    "targetFiles": [
+      "src/game/audioImpact.ts",
+      "src/game/audioAura.ts"
+    ],
+    "description": "Create layered impact audio with a low thump, mid crack, high shimmer, and character-specific tone. Add pitch variation, stereo panning, and a reverb tail for arena impacts. Include aura activation, super charge, and hitstop sound stingers. Ensure audio pools are reused, volume ducks on critical hits, and no clipping occurs.",
+    "status": "pending"
+  },
+  {
+    "id": "balance-advantage-system",
+    "title": "Advantage-Based Recovery and Punish Window Audit",
+    "category": "balance",
+    "targetFiles": [
+      "src/game/balanceAdvantage.ts",
+      "src/game/recoveryAudit.ts"
+    ],
+    "description": "Introduce advantage scoring for startup, active, recovery, and cancel windows. Tune recovery after block, whiff, and hit based on frame advantage and meter. Add a debug overlay showing advantage frames, and validate that no character has unsafe recovery longer than 12 frames on normal attacks and 18 frames on specials.",
     "status": "pending"
   }
 ]
