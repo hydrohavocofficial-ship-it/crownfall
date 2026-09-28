@@ -152,7 +152,7 @@ export default function MatchSetup({ cfg, setCfg, onStart, onBack }: Props) {
           {training && (
             <div className="bg-black/60 border-l-4 border-[#b067ff] p-4 text-white/80 font-semibold">
               <div className="font-display text-2xl text-[#b067ff] mb-1">TRAINING ROOM</div>
-              Infinite lives, no timer. Configure the dummy behaviour, lock its damage, show hitboxes and enable infinite ultimate meter from the in-game panel.
+              Infinite lives, no timer. Configure the dummy behaviour, lock its damage, show hitboxes and enable infinite Awakening gauge from the in-game panel.
             </div>
           )}
           <div className="mt-2 bg-black/60 p-4 border border-white/10">

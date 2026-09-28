@@ -132,7 +132,7 @@ export default function CharacterBuilder({ onBack, onPlay }: Props) {
         cape: Math.random() < 0.55 ? rndHex() : undefined, capeLen: 28 + Math.floor(Math.random() * 22), eye: col,
         weapon: rnd(WEAPONS)[0], mark: rnd(MARKS)[0], energy: col, energy2: '#ffffff', ninjaRun: Math.random() < 0.5,
       },
-      style: rnd(BASE_CHARACTERS).id, nspec: rnd(BASE_CHARACTERS).id, sspec: rnd(BASE_CHARACTERS).id, dspec: rnd(BASE_CHARACTERS).id, ult: rnd(BASE_CHARACTERS).id,
+      style: rnd(BASE_CHARACTERS).id, nspec: rnd(BASE_CHARACTERS).id, sspec: rnd(BASE_CHARACTERS).id, dspec: rnd(BASE_CHARACTERS).id, domain: rnd(BASE_CHARACTERS).id,
     });
     sfx('confirm');
   };
@@ -142,7 +142,27 @@ export default function CharacterBuilder({ onBack, onPlay }: Props) {
   };
 
   const src = (id: string) => BASE_CHARACTERS.find((c) => c.id === id) || BASE_CHARACTERS[0];
-  const specialPick = (slot: 'nspec' | 'sspec' | 'dspec' | 'ult', label: string) => {
+  /**
+   * The set-piece picker reads a different table from the others: a domain is not
+   * in the move list, it is retained raw material that the technique builder
+   * re-homes as the awakened special at half strength.
+   */
+  const domainPick = () => {
+    const cur = src(cfg.domain);
+    return (
+      <Section title="AWAKENED SET-PIECE">
+        <select value={cfg.domain} onChange={(e) => { setCfg({ ...cfg, domain: e.target.value }); sfx('select'); }}
+          className="w-full bg-black/70 border-2 border-white/20 px-2 py-1.5 font-semibold text-sm cursor-pointer focus:outline-none focus:border-white/60">
+          {BASE_CHARACTERS.map((c) => <option key={c.id} value={c.id}>{(c.domain || c.moves.nfu).name} — {c.name}</option>)}
+        </select>
+        <div className="text-[12px] text-white/65 font-semibold mt-1.5 leading-snug">
+          {(cur.domain || cur.moves.nfu).desc || 'No authored set-piece — the generated awakened special is used.'}
+        </div>
+        <div className="text-[11px] text-white/45 font-semibold mt-1">Becomes the neutral awakened special, at half power.</div>
+      </Section>
+    );
+  };
+  const specialPick = (slot: 'nspec' | 'sspec' | 'dspec', label: string) => {
     const cur = src(cfg[slot]).moves[slot];
     return (
       <Section title={label}>
@@ -331,7 +351,7 @@ export default function CharacterBuilder({ onBack, onPlay }: Props) {
                 {specialPick('nspec', 'NEUTRAL SPECIAL')}
                 {specialPick('sspec', 'SIDE SPECIAL')}
                 {specialPick('dspec', 'DOWN SPECIAL')}
-                {specialPick('ult', 'ULTIMATE')}
+                {domainPick()}
               </div>
             </>)}
           </div>

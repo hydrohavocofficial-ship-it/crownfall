@@ -3,6 +3,7 @@ import type { Fighter } from './fighter';
 import type { Game } from './game';
 import type { ProjSpec } from './projectiles';
 import { cleave } from './vfx';
+import { DOMAIN_POWER } from './awakenings';
 import {
   SHRINE_CAST, SHRINE_RISE, SHRINE_APPEAR, SHRINE_ACTIVE, SHRINE_FADE,
   SHRINE_SLASHES, SHRINE_DUR, DOMAIN_W, DOMAIN_H,
@@ -161,15 +162,15 @@ function sukunaKit(): Record<string, MoveDef> {
       [cut(5, 13, -45, -67, 100, 100, 11, 135, 6, 7)], { land: true, vel: [[3, -7, -6]], turns: 1 }),
     dair: M('Talons: Diagonal Drop', 'A forward diagonal dive spikes beneath Sukuna while carrying him toward the ledge.', 'dkick', 30, 6,
       [cut(6, 18, 37, -2, 58, 64, 9, -55, 5, 5)], { land: true, vel: [[5, 7, 12]], trail: 'foot' }),
-    nsig: M('Elbow: Execution Warrant', 'A short stunning elbow confirms J into Rib Cage, then L into World-Cutting Sentence. Whiffs cannot start the route.', 'uppercut', 34, 7,
+    nsig: M('Elbow: Execution Warrant', 'A short stunning elbow confirms K into Rib Cage. Spend the gauge, and L finishes the exchange with World-Cutting Sentence. Whiffs cannot start the route.', 'uppercut', 34, 7,
       [hit(7, 11, 42, -45, 68, 64, 8, 75, 2, 0, { fx: 'dark', stun: 14, pull: true })],
-      { chains: chain([12, 28], { heavy: 'boss_heavy2', onHitOnly: true }), chainLabel: 'J → J → L · EXECUTION' }),
-    boss_heavy2: M('Rib Cage', 'Combo-only second J: three close cleaves hold the victim in front. Confirm the final cut with L.', 'slash', 38, 4,
+      { chains: chain([12, 28], { heavy: 'boss_heavy2', onHitOnly: true }), chainLabel: 'K → K · EXECUTION' }),
+    boss_heavy2: M('Rib Cage', 'Combo-only second K: three close cleaves hold the victim in front. It leaves the exchange wide open - if you are Awakened, L puts the sentence into it.', 'slash', 38, 4,
       [cut(4, 6, 47, -34, 88, 66, 3, 65, 1, 0, { pull: true, stun: 6 }), cut(10, 12, 45, -62, 84, 90, 3, 80, 1, 0, { pull: true, stun: 6, g: 1 }), cut(16, 19, 53, -44, 96, 88, 5, 65, 1.5, 0, { pull: true, stun: 12, g: 2 })],
-      { vel: [[1, 4, 0]], grav: .35, chains: chain([20, 34], { limit: 'boss_finisher', onHitOnly: true }), chainLabel: 'L · WORLD-CUTTING SENTENCE' }),
-    boss_finisher: M('World-Cutting Sentence', 'Only J → J → L: pins space with a brief crosscut, then releases a long delayed execution plane. Uses Limit cooldown.', 'cast', 49, 7,
+      { vel: [[1, 4, 0]], grav: .35, label: 'RIB CAGE' }),
+    boss_finisher: M('World-Cutting Sentence', 'Awakened L, neutral: pins space with a brief crosscut, then releases a long delayed execution plane. The Awakening is the only way to earn it, and the whole awakened-special tier is spent on it.', 'cast', 49, 7,
       [cut(7, 10, 65, -42, 118, 112, 4, 80, 1, 0, { pull: true, stun: 18 }), cut(20, 23, 195, -50, 420, 80, 23, 28, 10, 10, { g: 1 })],
-      { ability: 'limit', cd: 290, sfx: 'sukuna-cleave', vel: [[0, 0, 0]], grav: .2 }),
+      { ability: 'awakened', stance: 'neutral', cd: 290, sfx: 'sukuna-cleave', vel: [[0, 0, 0]], grav: .2, label: 'WORLD-CUTTING SENTENCE' }),
     ssig: M('Throat Drag', 'Contact-only grab from a lunging palm, two close cuts, then a horizontal throw. Dodges, allies and distant targets cannot be grabbed.', 'thrust', 40, 7,
       [hit(7, 9, 42, -44, 62, 54, 4, 90, 0, 0, { fx: 'dark', stun: 8 })], { vel: [[3, 9, null], [10, 0, null]], ...grab(26, false), sfx: 'sukuna-cleave' }),
     dsig: M('Cleave: Skyhook', 'Crouches beneath pressure then cuts a narrow vertical column. Strong anti-air with little horizontal reach.', 'upslash', 40, 11,
@@ -190,33 +191,27 @@ function sukunaKit(): Record<string, MoveDef> {
     aspec: M('Fuga: Falling Arrow', 'Aerial K: recoil upward while firing a gravity-curved fire arrow down-forward; its landing burst denies the ground below.', 'flip', 37, 7, [],
       { ability: 'special', stance: 'air', cd: 180, turns: 1, vel: [[4, -3, -5]], sfx: 'sukuna-fuga', vfx: 'sukunaFuga',
         onFrame: at(7, (f, g) => shot(f, g, 'sukunaFuga', { x: 35, y: -20, vx: 10, vy: 7, w: 72, h: 72, life: 65, dmg: 12, ang: 65, kb: 7, sc: 7, fx: 'fire', fin: { dmg: 8, ang: 75, kb: 6, sc: 5 } })) }),
-    nex: M('Dismantle: Fan of Ruin', 'Neutral L sends three narrow blades at ascending angles, covering separate ground and jump lanes.', 'cast', 42, 11, [],
-      { ability: 'limit', stance: 'neutral', cd: 260, onFrame: at(11, (f, g) => { for (const vy of [-6, 0, 6]) shot(f, g, 'sukunaCleave', { vx: 14, vy, w: 72, h: 28, life: 28, dmg: 10, ang: vy < 0 ? 72 : 32, kb: 7, sc: 7 }); }) }),
-    sex: M('Cleave: Butcher Run', 'Side L carries an opponent through repeated close cuts before a broad outward slash. Committed forward movement.', 'spin', 46, 8,
-      [cut(8, 26, 38, -42, 90, 80, 2.5, 70, 1, 0, { pull: true, rehit: 6 }), cut(29, 33, 65, -42, 136, 94, 13, 32, 9, 9, { g: 1 })],
-      { ability: 'limit', stance: 'side', cd: 260, vel: [[5, 13, 0], [27, 0, null]], turns: 2 }),
-    dex: M('Spiderweb: Fracture Ground', 'Down L lays three delayed low cutting zones spreading left, center and right. Jumping escapes the shallow web.', 'slam', 43, 12, [],
-      { ability: 'limit', stance: 'down', cd: 260, onFrame: at(12, (f, g) => { for (const [x, delay] of [[0, 1], [-130, 9], [130, 17]]) shot(f, g, 'sukunaCleave', { x, y: -10, w: 130, h: 30, delay, activeFor: 4, life: delay + 12, dmg: 12, ang: 82, kb: 7, sc: 7 }); }) }),
-    aex: M('Cleave: Heaven Lattice', 'Aerial L stalls and seeds three vertical delayed blades at different distances; controls a broad landing corridor.', 'castUp', 42, 9, [],
-      { ability: 'limit', stance: 'air', cd: 260, grav: .12, vel: [[0, 0, 0]], onFrame: at(9, (f, g) => { for (const x of [-100, 30, 160]) shot(f, g, 'sukunaCleave', { x, y: 50, w: 38, h: 240, delay: 12, activeFor: 6, life: 28, dmg: 13, ang: -60, kb: 6, sc: 7 }); }) }),
-    naw: M('King of Curses: Coronation', 'Neutral U detonates a close radial cut and gains a short damage aura; K branches into a forward Shrine Gate.', 'castUp', 37, 9,
+    naw: M('King of Curses: Coronation', 'R at a full gauge detonates a close radial cut and opens the King of Curses. L branches into the World-Cutting Sentence.', 'castUp', 37, 9,
       [cut(9, 15, 0, -43, 176, 128, 8, 78, 3, 2, { stun: 8 })], { ability: 'awaken', stance: 'neutral', cd: 340,
         onFrame: at(9, f => { f.devilT = Math.max(f.devilT, 150); }), chains: chain([16, 34], { special: 'nfu' }) }),
-    saw: M('King of Curses: Pursuit', 'Side U advances with a low palm that pulls a victim into close range; K continues into a rising cleave chase.', 'thrust', 36, 7,
+    saw: M('King of Curses: Pursuit', 'Side R advances with a low palm that pulls a victim into close range; L continues into a rising cleave chase.', 'thrust', 36, 7,
       [hit(7, 14, 45, -31, 90, 54, 8, 70, 2, 0, { pull: true, stun: 8, fx: 'dark' })], { ability: 'awaken', stance: 'side', cd: 340, vel: [[4, 16, 0], [15, 0, null]], chains: chain([15, 33], { special: 'sfu' }) }),
-    daw: M('King of Curses: Dethrone', 'Down U sweeps behind then in front, pulling nearby ankles inward. K ignites a delayed furnace at your feet.', 'sweep', 38, 6,
+    daw: M('King of Curses: Dethrone', 'Down R sweeps behind then in front, pulling nearby ankles inward. L ignites a delayed furnace at your feet.', 'sweep', 38, 6,
       [cut(6, 10, -55, -13, 110, 30, 4, 110, 2, 0, { pull: true }), cut(13, 17, 60, -13, 120, 30, 6, 75, 3, 1, { g: 1, stun: 6 })],
       { ability: 'awaken', stance: 'down', cd: 340, chains: chain([18, 35], { special: 'dfu' }) }),
-    aaw: M('King of Curses: Sky Throne', 'Aerial U rises briefly with an overhead rotating cut; K releases a downward rain of execution blades.', 'rise', 36, 6,
+    aaw: M('King of Curses: Sky Throne', 'Aerial R rises briefly with an overhead rotating cut; L releases a downward rain of execution blades.', 'rise', 36, 6,
       [cut(6, 16, 0, -96, 150, 76, 8, 95, 5, 3)], { ability: 'awaken', stance: 'air', cd: 340, grav: .2, vel: [[4, 0, -8]], chains: chain([17, 33], { special: 'afu' }) }),
-    nfu: M('Shrine Gate: Four Pillars', 'Neutral U → K creates four staggered tall cleaves moving outward. Each pillar has a visible delay and can be escaped.', 'cast', 51, 10, [],
-      { ability: 'awakened', stance: 'neutral', sfx: 'sukuna-domain', onFrame: at(10, (f, g) => { for (let i = 0; i < 4; i++) shot(f, g, 'sukunaCleave', { x: 65 + i * 95, y: -75, w: 56, h: 170, delay: i * 6 + 1, activeFor: 5, life: i * 6 + 15, dmg: 8, ang: 40, kb: 6, sc: 5 }); }) }),
-    sfu: M('Rising Execution: Blood Ladder', 'Side U → K rises through three staggered levels, carrying a close opponent upward before the high finishing cut.', 'upslash', 44, 5,
+    nwl: M('King of Curses: Dismantle Thread', 'Awakened J, neutral: two fingertip cuts cross at head height and hold the victim still. Fast enough to paste into any string - K after it opens the Shrine Gate.', 'slash', 24, 4,
+      [cut(4, 6, 46, -58, 76, 54, 4.2, 32, 3.2, 1.4), cut(10, 13, 54, -44, 88, 62, 5.6, 38, 3.8, 2.2, { g: 1, stun: 4 })],
+      { ability: 'awakenLight', stance: 'neutral', chainLabel: 'AWAKENED J · J → K', chains: chain([9, 21], { heavy: 'nwh' }) }),
+    nwh: M('King of Curses: Shrine Gate', 'Awakened K, neutral: four tall cleaves stand up out of the floor in sequence, each with a visible delay to step around. L out of the recoil is the World-Cutting Sentence.', 'cast', 46, 9, [],
+      { ability: 'awakenHeavy', stance: 'neutral', cd: 90, sfx: 'sukuna-cleave', grav: .3, chainLabel: 'AWAKENED K · K → L',
+        onFrame: at(9, (f, g) => { for (let i = 0; i < 4; i++) shot(f, g, 'sukunaCleave', { x: 70 + i * 92, y: -78, w: 58, h: 176, delay: i * 5, activeFor: 5, life: i * 5 + 16, dmg: 6, ang: 40, kb: 5.4, sc: 4 }); }),
+        chains: chain([12, 34], { special: 'nfu' }) }),
+    sfu: M('Rising Execution: Blood Ladder', 'Awakened L, side: rises through three staggered levels, carrying a close opponent upward before the high finishing cut.', 'upslash', 44, 5,
       [cut(5, 10, 38, -38, 78, 70, 4, 90, 1, 0, { pull: true }), cut(13, 18, 34, -85, 80, 110, 4, 90, 2, 0, { pull: true, g: 1 }), cut(22, 26, 24, -110, 106, 136, 14, 86, 9, 9, { g: 2 })],
       { ability: 'awakened', stance: 'side', vel: [[3, 6, -8], [18, 1, -7]], grav: .4, sfx: 'sukuna-cleave' }),
-    dfu: M('Fuga: Furnace Mouth', 'Down U → K plants a wide stationary flame charge. It detonates after a readable delay and launches vertically.', 'slam', 50, 13, [],
-      { ability: 'awakened', stance: 'down', sfx: 'sukuna-fuga', vfx: 'sukunaFuga', onFrame: at(13, (f, g) => shot(f, g, 'sukunaFurnace', { x: 0, y: -35, w: 270, h: 130, delay: 18, activeFor: 5, life: 30, dmg: 22, ang: 85, kb: 10, sc: 9, fx: 'fire', col: '#ff7a24' })) }),
-    afu: M('Dismantle: Execution Rain', 'Aerial U → K sends five separated blades down-forward in sequence; drifting between their lanes avoids the barrage.', 'castUp', 48, 7, [],
+    afu: M('Dismantle: Execution Rain', 'Awakened L, air: five separated blades down-forward in sequence; drifting between their lanes avoids the barrage.', 'castUp', 48, 7, [],
       { ability: 'awakened', stance: 'air', grav: .2, vel: [[0, -2, 0]], onFrame: (f, fr, g) => { if ([7, 12, 17, 22, 27].includes(fr)) shot(f, g, 'sukunaCleave', { x: (fr - 7) * 6 - 45, y: 8, vx: 3, vy: 14, w: 28, h: 90, life: 26, dmg: 6, ang: -72, kb: 5, sc: 4 }); } }),
     /**
      * Malevolent Shrine, staged as the five-beat anime sequence: the chant's own
@@ -225,8 +220,8 @@ function sukunaKit(): Record<string, MoveDef> {
      * and dismantles everything inside it for a full five seconds, and the roar
      * clears the mix at four seconds without the cutting ever stopping.
      */
-    ult: M('Malevolent Shrine', 'R at full meter: Sukuna chants alone for three seconds — rooted and untouchable — then the Malevolent Shrine rises and Dismantles a domain half again as wide as it used to be for five straight seconds. Leave its footprint before the third second or eat every cut.', 'castUp', SHRINE_DUR, SHRINE_CAST, [],
-      { ability: 'ultimate', stance: 'neutral', ult: 'DOMAIN EXPANSION: MALEVOLENT SHRINE', invuln: [1, SHRINE_ACTIVE], vfx: 'sukunaShrine', sfx: 'sukuna-domain',
+    dfu: M('Malevolent Shrine', 'Awakened L, down: Sukuna chants alone, rooted and untouchable, then the Malevolent Shrine rises and Dismantles a domain half again as wide as it used to be. Leave its footprint before the cast finishes or eat every cut.', 'castUp', SHRINE_DUR, SHRINE_CAST, [],
+      { ability: 'awakened', stance: 'down', domainPower: DOMAIN_POWER, invuln: [1, SHRINE_ACTIVE], vfx: 'sukunaShrine', sfx: 'sukuna-domain',
         onFrame: sequence(
           at(SHRINE_CAST, (f, g) => {
             g.fx.text(f.x, f.y - 182, 'DOMAIN EXPANSION', '#ff4765', 26, 74);
@@ -306,15 +301,15 @@ function gojoKit(): Record<string, MoveDef> {
       [blue(7, 15, -66, -42, 130, 90, 12, 150, 8, 7)], { sfx: 'gojo-red', vel: [[7, 11, -2]], grav: .5 }),
     dair: M('Heel of the Strongest', 'A precise downward heel spikes directly beneath Gojo; narrow reach demands accurate positioning.', 'dkick', 28, 6,
       [blue(6, 16, 12, 5, 46, 68, 10, -88, 6, 6)], { trail: 'foot', land: true, vel: [[5, 1, 11]] }),
-    nsig: M('Blue: Arresting Palm', 'A short pull-palm confirms J into Red Suspension, then L into Point-Zero Purple. Missing the palm cannot start the route.', 'punch', 35, 8,
+    nsig: M('Blue: Arresting Palm', 'A short pull-palm confirms K into Red Suspension. Spend the gauge, and L finishes the exchange with Point-Zero Purple. Missing the palm cannot start the route.', 'punch', 35, 8,
       [blue(8, 12, 45, -44, 84, 76, 7, 85, 1.5, 0, { pull: true, stun: 14 })],
-      { chains: chain([13, 29], { heavy: 'boss_heavy2', onHitOnly: true }), chainLabel: 'J → J → L · CONVERGENCE' }),
-    boss_heavy2: M('Red Suspension', 'Combo-only second J: a low pull catches into an overhead compressing blow. Confirm with L for Purple.', 'castUp', 37, 5,
+      { chains: chain([13, 29], { heavy: 'boss_heavy2', onHitOnly: true }), chainLabel: 'K → K · CONVERGENCE' }),
+    boss_heavy2: M('Red Suspension', 'Combo-only second K: a low pull catches into an overhead compressing blow. It leaves the exchange wide open - if you are Awakened, L puts Purple into it.', 'castUp', 37, 5,
       [blue(5, 8, 42, -30, 88, 70, 4, 70, 1, 0, { pull: true, stun: 7 }), blue(13, 17, 40, -65, 110, 120, 6, 85, 1.5, 0, { pull: true, stun: 14, g: 1 })],
-      { sfx: 'gojo-red', grav: .3, vel: [[0, 2, 0]], chains: chain([18, 33], { limit: 'boss_finisher', onHitOnly: true }), chainLabel: 'L · POINT-ZERO PURPLE' }),
-    boss_finisher: M('Point-Zero Purple', 'Only J → J → L: an inward compression holds briefly before a close Purple explosion ejects the target. Uses Limit cooldown.', 'cast', 47, 6,
+      { sfx: 'gojo-red', grav: .3, vel: [[0, 2, 0]], label: 'RED SUSPENSION' }),
+    boss_finisher: M('Point-Zero Purple', 'Awakened L, neutral: an inward compression holds briefly before a close Purple explosion ejects the target. The Awakening is the only way to earn it, and the whole awakened-special tier is spent on it.', 'cast', 47, 6,
       [blue(6, 11, 55, -48, 134, 116, 4, 80, 1, 0, { pull: true, stun: 16 }), blue(19, 23, 80, -52, 198, 168, 24, 38, 10, 10, { g: 1 })],
-      { ability: 'limit', cd: 290, sfx: 'gojo-purple', vfx: 'hollowPurple', vel: [[0, 0, 0]], grav: .15 }),
+      { ability: 'awakened', stance: 'neutral', cd: 290, sfx: 'gojo-purple', vfx: 'hollowPurple', vel: [[0, 0, 0]], grav: .15, label: 'POINT-ZERO PURPLE' }),
     ssig: M('Red: Rail Cannon', 'A committed thin horizontal repulsion lane reaches far forward but leaves the space above Gojo open.', 'cast', 42, 13,
       [blue(13, 19, 150, -45, 290, 54, 16, 22, 9, 9)], { sfx: 'gojo-red', vel: [[13, -5, null]] }),
     dsig: M('Infinity: Expanding Boundary', 'A slow circular push starts close, then catches a wider ring. Two separate timing windows punish late approaches.', 'slam', 44, 12,
@@ -334,43 +329,41 @@ function gojoKit(): Record<string, MoveDef> {
       { ability: 'special', stance: 'down', cd: 180, ...counter(BLUE, 22, 14), onFrame: (f, fr, g) => { if (fr >= 3 && fr <= 22 && fr % 5 === 0) g.fx.ring(f.x, f.y - 42, 50, 54, BLUE, 9, 3); } }),
     aspec: M('Red: Aerial Thruster', 'Aerial K fires a downward Red burst and kicks Gojo upward and back. The attack stays below the escape path.', 'cast', 34, 7, [],
       { ability: 'special', stance: 'air', cd: 175, sfx: 'gojo-red', vel: [[7, -4, -9]], onFrame: at(7, (f, g) => shot(f, g, 'redBlast', { x: 15, y: 30, vx: 2, vy: 10, w: 105, h: 70, life: 25, activeFor: 25, dmg: 12, ang: -65, kb: 7, sc: 7 })) }),
-    nex: M('Maximum Blue: Fixed Star', 'Neutral L plants a large stationary Blue ahead with sustained inward pressure. Its final collapse launches those still nearby.', 'cast', 44, 13, [],
-      { ability: 'limit', stance: 'neutral', cd: 275, onFrame: at(13, (f, g) => shot(f, g, 'blueOrb', { x: 180, w: 155, h: 155, life: 60, dmg: 2, rehit: 10, pull: true, kb: 1, sc: 0, fin: { dmg: 12, ang: 78, kb: 8, sc: 7 } })) }),
-    sex: M('Maximum Red: Twin Reversal', 'Side L fires a low red shot, then a higher faster shot. Staggered heights cover retreating ground and aerial targets.', 'cast', 46, 10, [],
-      { ability: 'limit', stance: 'side', cd: 275, sfx: 'gojo-red', onFrame: sequence(
-        at(10, (f, g) => shot(f, g, 'redBlast', { y: -18, vx: 10, w: 110, h: 50, life: 32, activeFor: 32, dmg: 9, ang: 25, kb: 6, sc: 5 })),
-        at(22, (f, g) => shot(f, g, 'redBlast', { y: -98, vx: 15, w: 86, h: 70, life: 30, activeFor: 30, dmg: 13, ang: 35, kb: 9, sc: 8 }))) }),
-    dex: M('Infinity: Reversal Shell', 'Down L offers a short close counter; whether attacked or not, a delayed circular Red pulse clears space around Gojo.', 'counter', 45, 3,
-      [blue(27, 32, 0, -42, 290, 180, 14, 65, 8, 8)], { ability: 'limit', stance: 'down', cd: 275, sfx: 'gojo-red', ...counter(RED, 18, 10) }),
-    aex: M('Hollow Purple: Oblique Ray', 'Aerial L fires a compact Purple orb diagonally downward while hovering; a precise ledge and landing punish.', 'cast', 43, 12, [],
-      { ability: 'limit', stance: 'air', cd: 275, sfx: 'gojo-purple', vfx: 'hollowPurple', grav: .1, vel: [[0, 0, 0]],
-        onFrame: at(12, (f, g) => shot(f, g, 'hollowPurple', { vx: 12, vy: 8, w: 105, h: 105, life: 38, dmg: 18, ang: -42, kb: 8, sc: 8 })) }),
-    naw: M('Six Eyes: Focus', 'Neutral U concentrates a tight inward field and briefly accelerates Gojo. K combines the colors into Hollow Purple.', 'castUp', 36, 8,
+    naw: M('Six Eyes: Focus', 'Neutral R concentrates a tight inward field and briefly accelerates Gojo. L combines the colors into Point-Zero Purple.', 'castUp', 36, 8,
       [blue(8, 14, 0, -45, 140, 126, 6, 80, 1, 0, { pull: true, stun: 8 })], { ability: 'awaken', stance: 'neutral', cd: 350,
         onFrame: at(8, f => { f.godT = Math.max(f.godT, 130); }), chains: chain([15, 33], { special: 'nfu' }) }),
-    saw: M('Six Eyes: Shortest Path', 'Side U slips forward through a brief defensive window and pulls with an elbow. K unfolds a delayed rear Red trap.', 'thrust', 35, 7,
+    saw: M('Six Eyes: Shortest Path', 'Side R slips forward through a brief defensive window and pulls with an elbow. L unfolds a delayed rear Red trap.', 'thrust', 35, 7,
       [blue(7, 13, 36, -42, 70, 72, 8, 60, 2, 0, { pull: true, stun: 7 })], { ability: 'awaken', stance: 'side', cd: 350, invuln: [3, 6], vel: [[3, 18, 0], [14, 0, null]], chains: chain([14, 32], { special: 'sfu' }) }),
-    daw: M('Six Eyes: Event Horizon', 'Down U sweeps both sides at foot level, drawing nearby grounded targets inward. K raises the Infinite Void barrier.', 'slam', 38, 9,
+    daw: M('Six Eyes: Event Horizon', 'Down R sweeps both sides at foot level, drawing nearby grounded targets inward. L raises the Infinite Void barrier.', 'slam', 38, 9,
       [blue(9, 17, 0, -16, 230, 44, 2.5, 80, 1, 0, { pull: true, rehit: 7, stun: 6 })], { ability: 'awaken', stance: 'down', cd: 350, chains: chain([18, 35], { special: 'dfu' }) }),
-    aaw: M('Six Eyes: Weightless', 'Aerial U arrests the fall and repels above both shoulders; K splits Blue and Red into opposing aerial lanes.', 'castUp', 35, 6,
+    aaw: M('Six Eyes: Weightless', 'Aerial R arrests the fall and repels above both shoulders; L splits Blue and Red into opposing aerial lanes.', 'castUp', 35, 6,
       [blue(6, 13, 0, -100, 180, 66, 8, 92, 5, 4)], { ability: 'awaken', stance: 'air', cd: 350, grav: .05, vel: [[0, 0, -4]], chains: chain([14, 32], { special: 'afu' }) }),
-    nfu: M('Hollow Purple: Convergence', 'Neutral U → K charges for 16 frames then releases a large travelling Purple. Strong straight-line damage with a visible startup.', 'cast', 56, 16, [],
-      { ability: 'awakened', stance: 'neutral', sfx: 'gojo-purple', vfx: 'hollowPurple', onFrame: at(16, (f, g) => shot(f, g, 'hollowPurple', { x: 70, vx: 12, w: 150, h: 150, life: 58, dmg: 24, ang: 38, kb: 10, sc: 10 })) }),
-    sfu: M('Red: Reversed Causality', 'Side U → K places a delayed blast behind Gojo while he retreats toward it; a second forward palm traps a pursuing foe between timings.', 'backslash', 47, 8,
+    nwl: M('Six Eyes: Folded Recoil', 'Awakened J, neutral: an inward palm stalls the target, then the returning shove sends it back down the lane. The fastest thing Gojo owns, and the shortest reach - K is the commitment.', 'punch', 23, 4,
+      [blue(4, 7, 44, -50, 66, 56, 3.6, 30, 3, 1.4, { pull: true }), blue(10, 13, 52, -40, 78, 60, 5.4, 36, 4, 2.4, { g: 1, stun: 5 })],
+      { ability: 'awakenLight', stance: 'neutral', chainLabel: 'AWAKENED J · J → K', chains: chain([9, 20], { heavy: 'nwh' }) }),
+    nwh: M('Six Eyes: Hollow Convergence', 'Awakened K, neutral: Blue and Red collide in front of Gojo and the result leaves as a single travelling mass. The startup is long and visible; L out of the recoil is Point-Zero Purple.', 'cast', 48, 14, [],
+      { ability: 'awakenHeavy', stance: 'neutral', cd: 90, sfx: 'gojo-purple', vfx: 'hollowPurple', grav: .3, chainLabel: 'AWAKENED K · K → L',
+        onFrame: sequence(
+          at(8, (f, g) => { g.fx.ring(f.x + f.facing * 62, f.y - 50, 5, 44, BLUE, 16, 6); g.fx.ring(f.x + f.facing * 62, f.y - 50, 5, 44, RED, 16, 6); }),
+          at(14, (f, g) => {
+            g.fx.ring(f.x + f.facing * 62, f.y - 50, 48, 12, PURPLE, 20, 10);
+            g.fx.impact(f.x + f.facing * 66, f.y - 50, 90, PURPLE); g.shake(7);
+          }),
+          (f, fr, g) => { if (fr === 14) shot(f, g, 'hollowPurple', { x: 66, vx: 13, w: 132, h: 132, life: 52, dmg: 17, ang: 38, kb: 8, sc: 8 }); },
+        ),
+        chains: chain([18, 36], { special: 'nfu' }) }),
+    sfu: M('Red: Reversed Causality', 'Awakened L, side: places a delayed blast behind Gojo while he retreats toward it; a second forward palm traps a pursuing foe between timings.', 'backslash', 47, 8,
       [blue(22, 27, 50, -43, 96, 90, 11, 28, 8, 7)], { ability: 'awakened', stance: 'side', sfx: 'gojo-red', vel: [[3, -6, 0], [16, 0, null]],
         onFrame: at(8, (f, g) => shot(f, g, 'redBlast', { x: -110, w: 160, h: 150, dir: -f.facing, delay: 16, activeFor: 5, life: 30, dmg: 14, ang: 38, kb: 8, sc: 8 })) }),
-    dfu: M('Infinite Void: Blink', 'Down U → K forms a small brief domain. Two low-damage pulses add hitstun without forcibly freezing dodging or invulnerable targets.', 'castUp', 50, 14,
-      [blue(14, 17, 0, -60, 310, 210, 4, 90, 0, 0, { stun: 18 }), blue(29, 32, 0, -60, 310, 210, 9, 80, 6, 6, { g: 1 })],
-      { ability: 'awakened', stance: 'down', sfx: 'gojo-void', onFrame: at(14, (f, g) => { g.fx.ring(f.x, f.y - 60, 10, 160, PURPLE, 30, 10); g.flashScreen('#061026', .28); }) }),
-    afu: M('Limitless: Binary Stars', 'Aerial U → K sends Blue forward and Red backward on diverging diagonals, covering opposite sides with pull and repulsion.', 'spin', 45, 9, [],
+    afu: M('Limitless: Binary Stars', 'Awakened L, air: sends Blue forward and Red backward on diverging diagonals, covering opposite sides with pull and repulsion.', 'spin', 45, 9, [],
       { ability: 'awakened', stance: 'air', grav: .2, turns: 1, sfx: 'gojo-purple', onFrame: at(9, (f, g) => {
         shot(f, g, 'blueOrb', { x: 65, vx: 7, vy: -3, w: 110, h: 110, life: 36, dmg: 3, rehit: 10, pull: true, kb: 1, sc: 0 });
         shot(f, g, 'redBlast', { x: -65, vx: -10, vy: 6, dir: -f.facing, w: 120, h: 90, life: 34, activeFor: 34, dmg: 17, ang: 32, kb: 9, sc: 9 });
       }) }),
-    ult: M('Unlimited Void', 'R at full meter: a wide stationary barrier pulses information overload three times, then ejects caught targets. The boundary can be escaped; invulnerability is respected.', 'castUp', 99, 26,
+    dfu: M('Unlimited Void', 'Awakened L, down: a wide stationary barrier pulses information overload three times, then ejects caught targets. The boundary can be escaped; invulnerability is respected.', 'castUp', 99, 26,
       [blue(26, 29, 0, -85, 630, 340, 5, 90, 0, 0, { stun: 17 }), blue(44, 47, 0, -85, 630, 340, 5, 90, 0, 0, { stun: 17, g: 1 }),
         blue(62, 65, 0, -85, 630, 340, 5, 90, 0, 0, { stun: 17, g: 2 }), blue(79, 83, 0, -85, 630, 340, 22, 70, 10, 10, { g: 3 })],
-      { ability: 'ultimate', stance: 'neutral', ult: 'DOMAIN EXPANSION: UNLIMITED VOID', invuln: [1, 19], grav: 0, vel: [[0, 0, 0]], sfx: 'gojo-void',
+      { ability: 'awakened', stance: 'down', domainPower: DOMAIN_POWER, invuln: [1, 19], grav: 0, vel: [[0, 0, 0]], sfx: 'gojo-void',
         onFrame: (f, fr, g) => { if ([26, 44, 62, 79].includes(fr)) { g.fx.ring(f.x, f.y - 85, 5, 330, PURPLE, 24, 12); g.fx.ring(f.x, f.y - 85, 310, 35, BLUE, 22, 5); g.flashScreen('#08112f', .36); g.shake(7); } } }),
   };
 }
@@ -378,13 +371,35 @@ function gojoKit(): Record<string, MoveDef> {
 /** Run AFTER applySignatures so generic overrides cannot erase the bespoke boss kit. */
 export function installBossKit<T extends Record<string, MoveDef>>(id: string, _look: { energy: string }, moves: T): T & Record<string, MoveDef> {
   if (id !== 'sukuna' && id !== 'gojo') return moves;
-  Object.assign(moves, id === 'sukuna' ? sukunaKit() : gojoKit());
+  const kit = id === 'sukuna' ? sukunaKit() : gojoKit();
+  Object.assign(moves, kit);
+  /**
+   * The finisher *is* the neutral awakened special.
+   *
+   * It used to hang off the extra ability as the third beat of a K -> K -> L
+   * route, but that button is gone and L now belongs to the Awakening - so a
+   * finisher that needed its own press could not be reached from inside the
+   * state that is supposed to be paying for it. Filing it under `nfu` makes one
+   * move out of two: spend a gauge, press L, and a boss gets their finisher. The
+   * awakened-heavy it chains out of leads straight into it, so the climax is
+   * still a route rather than a button.
+   */
+  (moves as Record<string, MoveDef>).nfu = kit.boss_finisher as MoveDef;
   return moves;
 }
 
-/** Input roots deliberately mirror fighter dispatch, not every defined move. */
+/**
+ * Input roots deliberately mirror fighter dispatch, not every defined move.
+ *
+ * `boss_finisher` is the exception: it is authored under its own name for
+ * readability and installed as `nfu` above, so the audit has to see the key.
+ */
 export const BOSS_INPUT_ROOTS = ['nlight', 'slight', 'dlight', 'nair', 'sair', 'dair', 'nsig', 'ssig', 'dsig', 'rec', 'gp',
-  'aig', 'nspec', 'sspec', 'dspec', 'aspec', 'nex', 'sex', 'dex', 'aex', 'naw', 'saw', 'daw', 'aaw', 'ult'] as const;
+  'aig', 'nspec', 'sspec', 'dspec', 'aspec', 'naw', 'saw', 'daw', 'aaw',
+  'nwl', 'swl', 'dwl', 'awl', 'nwh', 'swh', 'dwh', 'awh', 'nfu', 'sfu', 'dfu', 'afu', 'boss_finisher'] as const;
+
+/** The buttons a chain can be bound to. Mirrors `Fighter`'s cancel routing. */
+const CHAIN_ACTIONS = ['light', 'heavy', 'special', 'awaken'] as const;
 
 export function auditBossKit(moves: Record<string, MoveDef>) {
   const seen = new Set<string>(); const queue: string[] = [...BOSS_INPUT_ROOTS]; const errors: string[] = [];
@@ -399,11 +414,16 @@ export function auditBossKit(moves: Record<string, MoveDef>) {
     if (c) {
       if (!c.window || c.window[0] > c.window[1] || c.window[1] >= m.dur) errors.push(`Invalid chain window: ${key}`);
       if (c.onHitOnly && !m.hits.length) errors.push(`Hit-confirm chain lacks melee: ${key}`);
-      for (const action of ['light', 'heavy', 'special', 'limit', 'awaken'] as const) if (c[action]) queue.push(c[action]!);
+      for (const action of CHAIN_ACTIONS) if (c[action]) queue.push(c[action]!);
     }
   }
   for (const key of Object.keys(moves)) if (!seen.has(key)) errors.push(`Unreachable: ${key}`);
-  if (moves.nsig.chains?.heavy !== 'boss_heavy2' || moves.boss_heavy2?.chains?.limit !== 'boss_finisher') errors.push('Missing J → J → L route');
-  if (new Set([...seen].map(k => moves[k].name)).size !== seen.size) errors.push('Duplicate move names');
+  if (moves.nsig.chains?.heavy !== 'boss_heavy2') errors.push('Missing K -> K heavy route');
+  if (moves.nfu !== moves.boss_finisher) errors.push('The finisher is not the awakened special');
+  if (moves.nwh.chains?.special !== 'nfu') errors.push('The awakened heavy does not lead into the finisher');
+  // Two keys can legitimately be one move - the finisher is filed as `nfu` too -
+  // so the name check runs over distinct moves, not distinct keys.
+  const unique = [...new Set([...seen].map(k => moves[k]))];
+  if (new Set(unique.map(m => m.name)).size !== unique.length) errors.push('Duplicate move names');
   return { reachable: seen.size, keys: [...seen], errors };
 }

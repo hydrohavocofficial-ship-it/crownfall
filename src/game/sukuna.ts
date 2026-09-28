@@ -1,8 +1,9 @@
 import { sfx } from './audio';
 import { makePortrait } from './portraits';
 import { installTechniques } from './techniques';
+import { mergeSignatures } from './abilities';
 import { cleave } from './vfx';
-import type { CharDef, CoreMoveKey, MoveKey } from './characters';
+import type { CharDef, CoreKit, MoveKey } from './characters';
 import type { AnimName, HitDef, MoveDef } from './types';
 
 const H = (f0: number, f1: number, x: number, y: number, w: number, h: number, dmg: number, ang: number, kb: number, sc: number, extra: Partial<HitDef> = {}): HitDef => ({ f: [f0, f1], x, y, w, h, dmg, ang, kb, sc, ...extra });
@@ -102,7 +103,7 @@ function grabSequence(f: any, fr: number, g: any) {
   }
 }
 
-const core: Record<CoreMoveKey, MoveDef> = {
+const core: CoreKit = {
   nlight: mv('Cleave', 'slash', 16, 3, [H(3, 6, 42, -47, 58, 44, 5.2, 38, 3.3, 1.8, { fx: 'slash' })], { vfx: 'sukunaCleave', trail: 'hand', chains: cN([3, 14]) }),
   nlight2: mv('Double Cleave', 'slash', 18, 3, [H(3, 6, 44, -47, 64, 46, 5.8, 40, 3.6, 2.1, { fx: 'slash' }), H(8, 11, 48, -47, 70, 48, 6.2, 42, 3.8, 2.4, { fx: 'slash', g: 1 })], { vfx: 'sukunaCleave', trail: 'hand', chains: cN2([3, 15]) }),
   nlight3: mv('Malevolent Slice', 'spin', 25, 4, [H(4, 11, 38, -45, 76, 58, 3.2, 46, 3.1, 2.3, { fx: 'slash', rehit: 3 }), H(12, 16, 42, -45, 84, 62, 8.5, 48, 6.3, 7.3, { fx: 'slash', g: 1 })], { turns: 2, vfx: 'sukunaCleave', trail: 'hand' }),
@@ -146,7 +147,7 @@ const core: Record<CoreMoveKey, MoveDef> = {
   sspec: mv('Face Slam', 'thrust', 48, 5, [H(5, 10, 56, -44, 84, 58, 7, 34, 5.2, 5.8, { fx: 'dark' })], { cd: 168, ability: 'special', stance: 'side', vfx: 'sukunaCleave', onFrame: (f, fr, g) => grabSequence(f, fr, g) }),
   dspec: mv('Black Flash Primer', 'punch', 34, 8, [H(8, 14, 50, -46, 78, 54, 8, 34, 6.2, 7.2, { fx: 'dark' })], { cd: 150, ability: 'special', stance: 'down', vfx: 'sukunaBlackFlash', onFrame: (f, fr, g) => { if (fr === 8 && !f.sukunaBlackFlash) setFlash(f, g, false); if (fr === 8 && f.sukunaBlackFlash) setFlash(f, g, true); } }),
   ult: mv('Malevolent Shrine', 'castUp', SHRINE_DUR, SHRINE_CAST, [], {
-    ult: 'MALEVOLENT SHRINE', ability: 'ultimate', stance: 'neutral',
+    ability: 'awakened', stance: 'neutral',
     invuln: [0, SHRINE_ACTIVE], vfx: 'sukunaShrine', cin: 110,
     desc: 'Domain Expansion. Sukuna chants alone for three seconds — rooted and untouchable — then the Malevolent Shrine rises and Dismantles everything inside a domain half again as wide as it used to be, five seconds of cuts on a roar that fades out one second in.',
     onFrame: (f: any, fr: number, g: any) => {
@@ -183,7 +184,12 @@ const core: Record<CoreMoveKey, MoveDef> = {
   }),
 };
 
-const generated = installTechniques('sukuna', look, core) as Record<MoveKey, MoveDef> & Record<string, MoveDef>;
+// The Shrine is lifted out of the move table before the tree is installed: it is
+// not a move any more, it is the neutral awakened special's raw material, and
+// the technique builder re-homes it at half power with a shorter cast.
+const merged = mergeSignatures('sukuna', core);
+const SHRINE = merged.domain!;
+const generated = installTechniques('sukuna', look, merged.moves, SHRINE) as Record<MoveKey, MoveDef> & Record<string, MoveDef>;
 // These are intentionally Sukuna-only aerial extensions. They are kept out of the
 // shared MoveKey union so every existing character retains its original move count.
 generated.aspec = mv('Fuga', 'flip', 42, 7, [], { ability: 'special', stance: 'air', land: true, turns: 1, cd: 175, vfx: 'sukunaFuga', desc: 'Sukuna flips through the air, charges a fire arrow, and detonates it against the ground.', onFrame: (f, fr, g) => {
@@ -192,27 +198,26 @@ generated.aspec = mv('Fuga', 'flip', 42, 7, [], { ability: 'special', stance: 'a
 generated.aig = mv('Phantom Rush', 'thrust', 38, 5, [H(5, 15, 54, -44, 92, 56, 9.5, 34, 6.6, 7.4, { fx: 'dark' })], { stance: 'air', land: true, invuln: [0, 24], vel: [[5, 24, -2]], vfx: 'sukunaPhantom', desc: 'Sukuna vanishes into a storm of afterimage cleaves and reappears behind the target.' });
 
 const branches = [
-  { input: 'H → H → H', name: `${generated.nlight.name} Chain`, desc: `${generated.nlight.name} → ${generated.nlight2.name} → ${generated.nlight3.name}.` },
-  { input: 'H → K', name: generated.nlight_spec.name!, desc: 'Cancels the light string into a signature EX burst.' },
-  { input: 'H → J', name: generated.nlight_heavy.name!, desc: 'Launcher finisher that pops foes into juggle range.' },
-  { input: '→ H → H / K / J', name: generated.slight2.name!, desc: `${generated.slight.name} extends into ${generated.slight2.name}, ${generated.slight_spec.name} or ${generated.slight_heavy.name}.` },
-  { input: '↓ H → H / K', name: generated.dlight2.name!, desc: `${generated.dlight.name} extends into ${generated.dlight2.name} or ${generated.dlight_spec.name}.` },
-  { input: 'Air H → H / K', name: generated.nair2.name!, desc: `${generated.nair.name} chains into ${generated.nair2.name} or ${generated.nair_spec.name}.` },
-  { input: 'K · N / → / ↓ / Air', name: generated.nspec.name!, desc: 'Sukuna has four unique Special stances: Cleave Wedge, Face Slam, Black Flash Primer, and Fuga.' },
-  { input: 'L · N / → / ↓ / Air', name: generated.nex.name!, desc: `Limit Break stances: ${generated.nex.name}, ${generated.sex.name}, ${generated.dex.name}, ${generated.aex.name}.` },
-  { input: 'U · N / → / ↓ / Air', name: generated.naw.name!, desc: `Awaken stances: ${generated.naw.name}, ${generated.saw.name}, ${generated.daw.name}, ${generated.aaw.name}.` },
-  { input: 'U → K', name: generated.nfu.name!, desc: `K immediately after U performs the awakened variant. Direction selects ${generated.sfu.name}, ${generated.dfu.name}, or ${generated.afu.name}.` },
+  { input: 'J → J → J', name: `${generated.nlight.name} Chain`, desc: `${generated.nlight.name} → ${generated.nlight2.name} → ${generated.nlight3.name}.` },
+  { input: 'J → L', name: generated.nlight_spec.name!, desc: 'Cancels the light string into a signature EX burst.' },
+  { input: 'J → K', name: generated.nlight_heavy.name!, desc: 'Launcher finisher that pops foes into juggle range.' },
+  { input: '→ J → J / L / K', name: generated.slight2.name!, desc: `${generated.slight.name} extends into ${generated.slight2.name}, ${generated.slight_spec.name} or ${generated.slight_heavy.name}.` },
+  { input: '↓ J → J / L', name: generated.dlight2.name!, desc: `${generated.dlight.name} extends into ${generated.dlight2.name} or ${generated.dlight_spec.name}.` },
+  { input: 'Air J → J / L', name: generated.nair2.name!, desc: `${generated.nair.name} chains into ${generated.nair2.name} or ${generated.nair_spec.name}.` },
+  { input: 'L · N / → / ↓ / Air', name: generated.nspec.name!, desc: 'Sukuna has four unique Special stances: Cleave Wedge, Face Slam, Black Flash Primer, and Fuga.' },
+  { input: 'R @ full gauge · N / → / ↓ / Air', name: generated.naw.name!, desc: `Spends the whole gauge to Awaken. Direction picks the transformation stance: ${generated.naw.name}, ${generated.saw.name}, ${generated.daw.name}, ${generated.aaw.name}.` },
+  { input: 'AWAKENED · J / K / L', name: `${generated.nwl.name} → ${generated.nwh.name} → ${generated.nfu.name}`, desc: 'A whole second kit. The awakened light is faster than anything in his base moveset, the heavy is the launcher, and the special is a Malevolent Shrine at half its old size and strength.' },
 ];
 
 const abilities = [
-  { key: 'K · Neutral Special', name: generated.nspec.name!, desc: generated.nspec.desc! },
-  { key: 'K · Forward Special', name: generated.sspec.name!, desc: generated.sspec.desc! },
-  { key: 'K · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
-  { key: 'K · Aerial Special', name: 'Fuga', desc: generated.aspec.desc! },
-  { key: 'L · Limit Break', name: generated.nex.name!, desc: `${generated.nex.desc} Stances: ${generated.sex.name} / ${generated.dex.name} / ${generated.aex.name}.` },
-  { key: 'U · Awaken', name: generated.naw.name!, desc: `${generated.naw.desc} Stances: ${generated.saw.name} / ${generated.daw.name} / ${generated.aaw.name}.` },
-  { key: 'U → K · Awakened', name: generated.nfu.name!, desc: `${generated.nfu.desc} Follow-up variants: ${generated.sfu.name}, ${generated.dfu.name}, ${generated.afu.name}.` },
-  { key: 'R · ULTIMATE', name: generated.ult.name!, desc: generated.ult.desc! },
+  { key: 'L · Neutral Special', name: generated.nspec.name!, desc: generated.nspec.desc! },
+  { key: 'L · Forward Special', name: generated.sspec.name!, desc: generated.sspec.desc! },
+  { key: 'L · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
+  { key: 'L · Aerial Special', name: 'Fuga', desc: generated.aspec.desc! },
+  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+  { key: 'AWAKENED · J · Light', name: generated.nwl.name!, desc: generated.nwl.desc! },
+  { key: 'AWAKENED · K · Heavy', name: generated.nwh.name!, desc: generated.nwh.desc! },
+  { key: 'AWAKENED · L · Shrine', name: generated.nfu.name!, desc: generated.nfu.desc! },
 ];
 
 export const SUKUNA: CharDef = {
@@ -220,12 +225,12 @@ export const SUKUNA: CharDef = {
   desc: 'The Shibuya-era King of Curses inhabiting Yuji\'s body. Every limb carries a surgical cleave, every impact distorts space, and the Malevolent Shrine turns an entire battlefield into a slaughterhouse.',
   portrait: makePortrait('sukuna', look, '#e52345'),
   stats: { speed: 6.4, air: 6.2, jump: 13.6, weight: .94, scale: 1.02, gravity: .61 },
-  statBars: { power: 5, speed: 4, range: 4, defense: 3 }, look, moves: generated,
+  statBars: { power: 5, speed: 4, range: 4, defense: 3 }, look, moves: generated, domain: SHRINE,
   moveBranches: branches, abilities,
   passives: [
     { name: 'Cursed Adaptation', desc: 'Sukuna’s cleaves gain extra damage as the target accumulates damage, turning a wounded opponent into a finished execution.' },
     { name: 'Black Flash Reprise', desc: 'During Down Special’s red flash window, pressing Special again upgrades the strike into a devastating Black Flash.' },
-    { name: 'Shrine Pressure', desc: 'Malevolent Shrine takes three full seconds to open, then Dismantles a domain half again as wide as it used to be for five continuous seconds.' },
+    { name: 'Shrine Pressure', desc: 'The Malevolent Shrine still opens slowly and Dismantles a wide domain, but it is now half the size and half the strength, and it is performed from the awakened state on a cooldown rather than bought outright with a full gauge.' },
   ],
   ai: { vertSpec: 'dspec', horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 430 },
 };

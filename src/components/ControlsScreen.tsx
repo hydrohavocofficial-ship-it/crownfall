@@ -64,15 +64,14 @@ export default function ControlsScreen({ bindings, setBindings, settings, setSet
             <div className="font-display text-2xl text-[#3fa9ff]">🎮 GAMEPAD</div>
             <div className={`text-sm font-bold mb-2 ${pad ? 'text-[#44e07a]' : 'text-white/50'}`}>{pad ? `Connected: ${pad.slice(0, 48)}` : 'No controller detected — press any button on your pad'}</div>
             <div className="grid grid-cols-2 gap-x-4 text-sm font-semibold text-white/80">
-              <span>Left Stick / D-Pad</span><span>Move & Aim</span>
+              <span>Left Stick / D-Pad</span><span>Move &amp; Aim</span>
               <span>A / Cross</span><span>Jump</span>
               <span>X / Square</span><span>Light Attack</span>
               <span>B / Circle</span><span>Heavy Attack</span>
               <span>Y / Triangle</span><span>Signature Special</span>
-              <span>LB</span><span>Awaken (then Special = U → K)</span>
-              <span>RB / LT</span><span>Dodge / Dash</span>
-              <span>RT</span><span>Limit Break</span>
-              <span>Select / R3</span><span>Ultimate</span>
+              <span>LB</span><span>Awaken (needs a full gauge)</span>
+              <span>RB / RT / LT</span><span>Dodge / Dash</span>
+              <span>Select / R3</span><span>Awakened Light</span>
               <span>Start</span><span>Pause</span>
             </div>
           </div>

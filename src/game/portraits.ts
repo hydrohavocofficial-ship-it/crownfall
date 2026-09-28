@@ -93,6 +93,46 @@ export function makePortrait(id: string, look: Look, color: string): string {
   drawFighter(ctx, f, POSES.hero, 40);
   ctx.restore();
 
+  // ---- Ultra Instinct key-visual pass ----
+  // The in-game renderer already draws the silver crown and concentric eyes, but
+  // a portrait is a hero shot: the platinum hair needs its own backlit halo or
+  // pale-on-pale armour disappears into the backdrop, and the shadow under the
+  // feet has to be flared out into a full cosmic ring. Both are additive passes
+  // that a non-UI fighter never pays for.
+  if (look.hairStyle === 'ui') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // Backlit corona behind the head: a tight white core inside a wide cyan shell.
+    const hx = cx - 4, hy = H * 0.965 - 96 * scale;
+    const halo = ctx.createRadialGradient(hx, hy, 2, hx, hy, 96);
+    halo.addColorStop(0, hexA('#ffffff', 0.4));
+    halo.addColorStop(0.22, hexA('#f8fafc', 0.3));
+    halo.addColorStop(0.55, hexA('#93c5fd', 0.17));
+    halo.addColorStop(1, hexA('#8b5cf6', 0));
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.ellipse(hx, hy, 96, 108, 0, 0, 7); ctx.fill();
+    // Drifting silver motes lifting off the silhouette.
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2;
+      const r = 40 + (i % 5) * 22;
+      const r2 = 2 + (i % 4) * 2.4;
+      ctx.fillStyle = hexA(i % 3 ? '#ffffff' : '#93c5fd', 0.5);
+      ctx.beginPath();
+      ctx.ellipse(hx + Math.cos(a) * r, hy + Math.sin(a) * r * 1.15, r2, r2 * 1.7, 0, 0, 7);
+      ctx.fill();
+    }
+    // Ground distortion ring, matching the in-game aura's foot flare.
+    const gy = H * 0.962;
+    const ring = ctx.createRadialGradient(cx - 4, gy, 2, cx - 4, gy, S * 0.3);
+    ring.addColorStop(0, hexA('#ffffff', 0.36));
+    ring.addColorStop(0.4, hexA('#e0f2fe', 0.2));
+    ring.addColorStop(0.75, hexA('#8b5cf6', 0.09));
+    ring.addColorStop(1, hexA('#8b5cf6', 0));
+    ctx.fillStyle = ring;
+    ctx.beginPath(); ctx.ellipse(cx - 4, gy, S * 0.3, S * 0.062, 0, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+
   // ---- foreground particles ----
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';

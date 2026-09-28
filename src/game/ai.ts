@@ -8,7 +8,7 @@ export const DIFF: Record<Difficulty, { react: number; aggr: number; dodge: numb
   hard: { react: 3, aggr: 0.97, dodge: 0.72, combo: 0.95, recover: 1, special: 0.88, idle: 0, precision: 1, atkCD: 6 },
 };
 
-const PRESS: InputKey[] = ['jump', 'light', 'heavy', 'dodge', 'special', 'awaken', 'limit', 'ult'];
+const PRESS: InputKey[] = ['jump', 'light', 'heavy', 'dodge', 'special', 'awaken'];
 
 export class AI {
   me: Fighter; p: (typeof DIFF)['easy']; diff: Difficulty;
@@ -124,7 +124,6 @@ export class AI {
           if (ch.light && r < p.combo * 0.9) { w.light = true; return this.finalize(w); }
           if (ch.special && r < p.special * 0.95) { w.special = true; return this.finalize(w); }
           if (ch.awaken && r < p.special * 0.7) { w.awaken = true; return this.finalize(w); }
-          if (ch.limit && r < p.special * 0.65) { w.limit = true; return this.finalize(w); }
           if (ch.heavy && r < p.combo * 0.7) { w.heavy = true; return this.finalize(w); }
         }
       }
@@ -141,39 +140,48 @@ export class AI {
 
     const faceT = () => { if (dir > 0) w.right = true; else w.left = true; };
 
-    // ultimate
-    if (me.meter >= 100 && adx < me.def.ai.ultRange && Math.abs(dy) < 160 && Math.random() < 0.06 * p.precision + 0.01) {
-      faceT(); w.ult = true; return this.finalize(w);
+    /**
+     * THE AWAKENING.
+     *
+     * A CPU only spends a full gauge when it is actually going to use the window:
+     * close enough to hurt, not already committed to something better, and with
+     * enough of the match left to land hits inside it. Opening the state in the
+     * corner at four percent would just throw the advantage away.
+     */
+    if (me.meter >= 100 && me.awakenLock <= 0 && adx < me.def.ai.ultRange && Math.abs(dy) < 200
+      && Math.random() < 0.02 * p.precision * (this.diff === 'hard' ? 2.4 : 1) && this.techCD <= 0) {
+      faceT();
+      w.awaken = true;
+      this.techCD = 200;
+      return this.finalize(w);
     }
-    // signature technique system: awaken for pressure, H for range or punish
-    if (this.techCD <= 0) {
-      const awakenKey = !me.grounded ? 'aaw' : Math.abs(dy) > 70 && dy < 0 ? 'naw' : dir > 0 ? 'saw' : 'saw';
-      const limitKey = !me.grounded ? 'aex' : adx > 210 ? 'nex' : dir > 0 ? 'sex' : 'sex';
-      if (me.cds[awakenKey] <= 0 && adx < 360 && Math.abs(dy) < 170 && Math.random() < p.special * 0.035) {
-        faceT(); w.awaken = true; this.techCD = 110 + Math.random() * 90; return this.finalize(w);
+    // Zoning special. While Awakened, L is a different move entirely, so the CPU
+    // has to stop reaching for a stance it does not have.
+    if (!me.awakened) {
+      const zs = me.def.ai.zoneSpec;
+      if (zs && me.cds[zs] <= 0 && adx > 180 && adx < 520 && Math.abs(dy) < 200 && Math.random() < p.special * 0.05) {
+        w.special = true; if (zs === 'sspec') faceT(); if (zs === 'dspec') w.down = true;
+        return this.finalize(w);
       }
-      if (me.cds[limitKey] <= 0 && adx < 560 && Math.abs(dy) < 220 && Math.random() < p.special * 0.028) {
-        faceT(); w.limit = true; this.techCD = 120 + Math.random() * 110; return this.finalize(w);
-      }
-    }
-    // zoning special
-    const zs = me.def.ai.zoneSpec;
-    if (zs && me.cds[zs] <= 0 && adx > 180 && adx < 520 && Math.abs(dy) < 200 && Math.random() < p.special * 0.05) {
-      w.special = true; if (zs === 'sspec') faceT(); if (zs === 'dspec') w.down = true;
+    } else if (me.cds.nfu <= 0 && adx > 120 && adx < 480 && Math.abs(dy) < 200 && Math.random() < p.special * 0.06) {
+      faceT(); w.special = true;
       return this.finalize(w);
     }
 
     let attacked = false;
     if (this.atkCD <= 0 || comboing) {
       const r = Math.random();
+      // `horizSpec` names one of the base-kit specials. While Awakened, L points
+      // somewhere else entirely, so the CPU must not reach for it by name.
+      const spec = me.awakened ? undefined : me.def.ai.horizSpec;
       if (adx < range && Math.abs(dy) < 55) {
         faceT();
         const killable = T.damage > 100 + (1 - p.precision) * 60;
         if (me.grounded) {
           if (killable && r < 0.55) { w.heavy = true; if (Math.random() < 0.6) faceT(); else { w.left = w.right = false; } }
-          else if (comboing && r < 0.18 && me.def.ai.horizSpec && me.cds[me.def.ai.horizSpec] <= 0 && Math.random() < p.special) { w.special = true; }
+          else if (comboing && r < 0.18 && spec && me.cds[spec] <= 0 && Math.random() < p.special) { w.special = true; }
           else if (comboing && r < 0.28 && T.state === 'hitstun' && Math.random() < p.combo) { w.heavy = true; }
-          else if (r < 0.12 && me.def.ai.horizSpec && me.cds[me.def.ai.horizSpec] <= 0 && Math.random() < p.special) { w.special = true; }
+          else if (r < 0.12 && spec && me.cds[spec] <= 0 && Math.random() < p.special) { w.special = true; }
           else if (r < 0.45) w.light = true;
           else if (r < 0.75) { w.light = true; w.left = w.right = false; }
           else if (r < 0.88) { w.light = true; w.down = true; w.left = w.right = false; }
@@ -192,8 +200,7 @@ export class AI {
       } else if (adx < 70 && dy > 40 && dy < 260 && !me.grounded) {
         w.down = true; if (r < 0.35 && T.damage > 90) w.heavy = true; else w.light = true; attacked = true;
       } else if (adx < 240 && adx > 120 && Math.abs(dy) < 60 && me.grounded && r < 0.04 * p.aggr) {
-        const hs = me.def.ai.horizSpec;
-        if (hs && me.cds[hs] <= 0 && Math.random() < p.special) { faceT(); w.special = true; if (hs === 'dspec') w.down = true; if (hs === 'nspec') { w.left = w.right = false; } attacked = true; }
+        if (spec && me.cds[spec] <= 0 && Math.random() < p.special) { faceT(); w.special = true; if (spec === 'dspec') w.down = true; if (spec === 'nspec') { w.left = w.right = false; } attacked = true; }
         else { faceT(); w.light = true; attacked = true; } // dash-in side light
       }
       if (attacked) this.atkCD = p.atkCD * (0.6 + Math.random() * 0.8) * (comboing ? 0.3 : 1);

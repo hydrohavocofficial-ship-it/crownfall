@@ -16,7 +16,12 @@ export default function MoveList({ character, bindings }: { character: CharDef; 
     <div className="space-y-2">
       {moves.map(({ key, move, input, stance, chain }) => <article key={key} className="bg-black/40 p-3 border-l-2" style={{ borderColor: character.color }}>
         <div className="flex flex-wrap items-baseline justify-between gap-1"><b className="text-white">{move.name}</b><code className="text-sm text-amber-200">{input}</code></div>
-        <div className="uppercase tracking-wider text-[10px] text-cyan-200">{stance} · {chain ? 'Combo unlock' : key === 'ult' ? '100% meter' : 'Direct input'}</div>
+        <div className="uppercase tracking-wider text-[10px] text-cyan-200">
+          {stance} · {chain
+            ? 'Combo unlock'
+            : move.ability === 'awaken' ? 'Needs a full gauge'
+              : move.ability?.startsWith('awaken') ? 'While Awakened' : 'Direct input'}
+        </div>
         <p className="text-xs text-white/70 mt-1">{move.desc || `${move.anim} attack${move.hits.some((h) => h.pull) ? ' that draws opponents inward' : ''}. ${move.hits.length > 1 ? 'Multiple strike stages.' : ''}`}</p>
         <div className="text-[10px] text-white/45 mt-1">Startup {move.startup}f · Duration {move.dur}f{move.cd ? ` · Cooldown ${(move.cd / 60).toFixed(1)}s` : ''}{move.chains ? ` · Follow-up ${chainWindow(move).join('–')}f${move.chains.onHitOnly ? ' · Must connect first' : ''}` : ''}</div>
       </article>)}

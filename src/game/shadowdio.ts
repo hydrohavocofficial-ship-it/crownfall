@@ -12,13 +12,14 @@
  *    oxidation-purple shoulders, stacked block gauntlets, collapsing cube floor.
  *  - His thrown weapon is a real knife — blade, guard and wrapped grip spinning
  *    end over end — not a four-blade fan projectile.
- *  - The ultimate is a real time stop handled by the combat engine
- *    (see Game.timeStop), not a screen tint.
+ *  - Za Warudo is his awakened special, and it is a real time stop handled by
+ *    the combat engine (see Game.timeStop), not a screen tint.
  */
 import { sfx } from './audio';
 import { makePortrait } from './portraits';
 import { installTechniques } from './techniques';
-import type { CharDef, CoreMoveKey, MoveKey } from './characters';
+import { mergeSignatures } from './abilities';
+import type { CharDef, CoreKit, MoveKey } from './characters';
 import type { AnimName, HitDef, MoveDef } from './types';
 
 const H = (f0: number, f1: number, x: number, y: number, w: number, h: number, dmg: number, ang: number, kb: number, sc: number, extra: Partial<HitDef> = {}): HitDef => ({ f: [f0, f1], x, y, w, h, dmg, ang, kb, sc, ...extra });
@@ -106,7 +107,7 @@ function bloodDrain(f: any, fr: number, g: any) {
 // ---------------------------------------------------------------------------
 // Light attacks — Shadow DIO's own fists. Fast, no Stand.
 // ---------------------------------------------------------------------------
-const lights: Record<CoreMoveKey, MoveDef> = {
+const lights: CoreKit = {
   nlight: mv('Shadow Jab', 'jab', 14, 3, [H(3, 6, 40, -46, 52, 40, 5, 40, 3.2, 1.7, { fx: 'blunt' })], { vfx: 'dioFist', chains: cN([3, 12]) }),
   nlight2: mv('Cross Fang', 'hook', 15, 3, [H(3, 6, 44, -48, 58, 44, 5.6, 44, 3.5, 2, { fx: 'blunt' })], { vfx: 'dioFist', chains: cN2([3, 13]) }),
   nlight3: mv('Muda Barrage', 'flurry', 22, 3, [
@@ -201,12 +202,15 @@ const lights: Record<CoreMoveKey, MoveDef> = {
   }),
 
   // -------------------------------------------------------------------------
-  // Ultimate — ZA WARUDO. The engine freezes the world; see Game.timeStop.
-  // The move's own animation is the part where DIO cannot move: the five-second
-  // clock only starts the moment he is released and free to act.
+  // Za Warudo. The engine freezes the world; see Game.timeStop. The move's own
+  // animation is the part where DIO cannot move: the five-second clock only
+  // starts the moment he is released and free to act.
+  //
+  // This is a retained set-piece rather than a button. It is handed to the
+  // technique builder and becomes his neutral awakened special.
   // -------------------------------------------------------------------------
   ult: mv('Za Warudo', 'castUp', 40, 12, [], {
-    ult: 'ZA WARUDO', ability: 'ultimate', stance: 'neutral', invuln: [0, 40], grav: .2, cin: 40,
+    ability: 'awakened', stance: 'neutral', invuln: [0, 40], grav: .2, cin: 40,
     desc: 'Time itself stops. Every other fighter freezes solid, and the five-second clock begins only once Shadow DIO can move. Every blow he lands is held back and released all at once when time resumes.',
     vfx: 'dioTimeCast',
     onFrame: (f, fr, g) => {
@@ -218,7 +222,11 @@ const lights: Record<CoreMoveKey, MoveDef> = {
 
 /** Air K is declared inline above; this is the readable alias used by the move list. */
 
-const generated = installTechniques('shadowdio', look, lights) as Record<MoveKey, MoveDef> & Record<string, MoveDef>;
+// Za Warudo is lifted out of the move table: it is the neutral awakened
+// special's raw material, not a move of its own any more.
+const merged = mergeSignatures('shadowdio', lights);
+const WARUDO = merged.domain!;
+const generated = installTechniques('shadowdio', look, merged.moves, WARUDO) as Record<MoveKey, MoveDef> & Record<string, MoveDef>;
 generated.aspec = mv('Air Shadow Cutter', 'axeKick', 34, 6, [H(6, 14, 34, -34, 92, 70, 9, 40, 6, 6.8, { fx: 'blunt' })], {
   ability: 'special', stance: 'air', land: true, vfx: 'dioFist',
   desc: 'A spinning double kick performed entirely in the air, still without calling the Stand.',
@@ -227,28 +235,27 @@ generated.aig = mv('The World: Air Intercept', 'palm', 36, 5, [H(5, 15, 54 + STA
   { stance: 'air', land: true, stand: true, invuln: [0, 24], vel: [[5, 24, -2]], vfx: 'standFlurry', desc: 'The World phases in mid-air and intercepts with an open-hand stop.' });
 
 const branches = [
-  { input: 'H → H → H', name: `${generated.nlight.name} Chain`, desc: `${generated.nlight.name} → ${generated.nlight2.name} → ${generated.nlight3.name}.` },
-  { input: 'H → K', name: generated.nlight_spec.name!, desc: 'Cancels the light string into a signature EX burst.' },
-  { input: 'H → J', name: generated.nlight_heavy.name!, desc: 'Launcher finisher that pops foes into juggle range.' },
-  { input: '→ H → H / K / J', name: generated.slight2.name!, desc: `${generated.slight.name} extends into ${generated.slight2.name}, ${generated.slight_spec.name} or ${generated.slight_heavy.name}.` },
-  { input: '↓ H → H / K', name: generated.dlight2.name!, desc: `${generated.dlight.name} extends into ${generated.dlight2.name} or ${generated.dlight_spec.name}.` },
-  { input: 'J · Heavy', name: generated.nsig.name!, desc: 'All three Heavy attacks call The World forward. The Stand attacks with Shadow DIO, never instead of him.' },
-  { input: 'K · N / → / ↓ / Air', name: generated.nspec.name!, desc: 'Four unique Special stances: Muda Rush, Knife Fan, Blood Drain, and the Air Knife Volley.' },
-  { input: 'L · N / → / ↓ / Air', name: generated.nex.name!, desc: `Limit Break stances: ${generated.nex.name}, ${generated.sex.name}, ${generated.dex.name}, ${generated.aex.name}.` },
-  { input: 'U · N / → / ↓ / Air', name: generated.naw.name!, desc: `Awaken stances: ${generated.naw.name}, ${generated.saw.name}, ${generated.daw.name}, ${generated.aaw.name}.` },
-  { input: 'U → K', name: generated.nfu.name!, desc: `K immediately after U performs the awakened variant. Direction selects ${generated.sfu.name}, ${generated.dfu.name}, or ${generated.afu.name}.` },
+  { input: 'J → J → J', name: `${generated.nlight.name} Chain`, desc: `${generated.nlight.name} → ${generated.nlight2.name} → ${generated.nlight3.name}.` },
+  { input: 'J → L', name: generated.nlight_spec.name!, desc: 'Cancels the light string into a signature EX burst.' },
+  { input: 'J → K', name: generated.nlight_heavy.name!, desc: 'Launcher finisher that pops foes into juggle range.' },
+  { input: '→ J → J / L / K', name: generated.slight2.name!, desc: `${generated.slight.name} extends into ${generated.slight2.name}, ${generated.slight_spec.name} or ${generated.slight_heavy.name}.` },
+  { input: '↓ J → J / L', name: generated.dlight2.name!, desc: `${generated.dlight.name} extends into ${generated.dlight2.name} or ${generated.dlight_spec.name}.` },
+  { input: 'K · Heavy', name: generated.nsig.name!, desc: 'All three Heavy attacks call The World forward. The Stand attacks with Shadow DIO, never instead of him.' },
+  { input: 'L · N / → / ↓ / Air', name: generated.nspec.name!, desc: 'Four unique Special stances: Muda Rush, Knife Fan, Blood Drain, and the Air Knife Volley.' },
+  { input: 'R @ full gauge · N / → / ↓ / Air', name: generated.naw.name!, desc: `Spends the whole gauge to Awaken. Direction picks the transformation stance: ${generated.naw.name}, ${generated.saw.name}, ${generated.daw.name}, ${generated.aaw.name}.` },
+  { input: 'AWAKENED · J / K / L', name: `${generated.nwl.name} → ${generated.nwh.name} → ${generated.nfu.name}`, desc: 'A second kit for a second stance. The awakened special is Za Warudo itself: the engine freezes the world, and every blow he lands is held back and released together when time resumes.' },
 ];
 
 const abilities = [
-  { key: 'K · Neutral Special', name: generated.nspec.name!, desc: generated.nspec.desc! },
-  { key: 'K · Forward Special', name: generated.sspec.name!, desc: generated.sspec.desc! },
-  { key: 'K · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
-  { key: 'K · Aerial Special', name: generated.sair_spec.name!, desc: generated.sair_spec.desc! },
-  { key: 'J · Neutral Heavy', name: generated.nsig.name!, desc: generated.nsig.desc! },
-  { key: 'L · Limit Break', name: generated.nex.name!, desc: `${generated.nex.desc} Stances: ${generated.sex.name} / ${generated.dex.name} / ${generated.aex.name}.` },
-  { key: 'U · Awaken', name: generated.naw.name!, desc: `${generated.naw.desc} Stances: ${generated.saw.name} / ${generated.daw.name} / ${generated.aaw.name}.` },
-  { key: 'U → K · Awakened', name: generated.nfu.name!, desc: `${generated.nfu.desc} Follow-up variants: ${generated.sfu.name}, ${generated.dfu.name}, ${generated.afu.name}.` },
-  { key: 'R · ULTIMATE', name: generated.ult.name!, desc: generated.ult.desc! },
+  { key: 'L · Neutral Special', name: generated.nspec.name!, desc: generated.nspec.desc! },
+  { key: 'L · Forward Special', name: generated.sspec.name!, desc: generated.sspec.desc! },
+  { key: 'L · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
+  { key: 'L · Aerial Special', name: generated.sair_spec.name!, desc: generated.sair_spec.desc! },
+  { key: 'K · Neutral Heavy', name: generated.nsig.name!, desc: generated.nsig.desc! },
+  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+  { key: 'AWAKENED · J · Light', name: generated.nwl.name!, desc: generated.nwl.desc! },
+  { key: 'AWAKENED · K · Heavy', name: generated.nwh.name!, desc: generated.nwh.desc! },
+  { key: 'AWAKENED · L · Za Warudo', name: generated.nfu.name!, desc: generated.nfu.desc! },
 ];
 
 export const SHADOW_DIO: CharDef = {
@@ -256,11 +263,11 @@ export const SHADOW_DIO: CharDef = {
   desc: 'The sinister DIO. He fights with a light, effortless jab, lets The World take the heavy blows, and ends every exchange by stopping time itself — then cashing in every hit he landed inside it.',
   portrait: makePortrait('shadowdio', look, '#4ad6a0'),
   stats: { speed: 7.2, air: 7.4, jump: 13.8, weight: .9, scale: 1.0, gravity: .6 },
-  statBars: { power: 4, speed: 5, range: 3, defense: 3 }, look, moves: generated,
+  statBars: { power: 4, speed: 5, range: 3, defense: 3 }, look, moves: generated, domain: WARUDO,
   moveBranches: branches, abilities,
   passives: [
     { name: 'The World', desc: 'Every Heavy attack manifests the Stand beside him, adding reach, a second silhouette and much higher impact than his bare hands.' },
-    { name: 'Za Warudo', desc: 'Time Stop lasts five real seconds, and the clock only begins once Shadow DIO is free to move again. Hits landed during it deal no damage until time resumes, when they all land together.' },
+    { name: 'Za Warudo', desc: 'The awakened special is a real time stop. Time Stop lasts five real seconds, and the clock only begins once Shadow DIO is free to move again. Hits landed during it deal no damage until time resumes, when they all land together. It costs the Awakening rather than a whole gauge, so it can be done twice in a stock instead of never.' },
     { name: 'Suspended Steel', desc: 'Knives and projectiles created while time is stopped hang motionless in the air and resume from exactly where they were released.' },
     { name: 'Silver Rain', desc: 'Every knife he throws is a real blade: it spins end over end, covers its own lane, and keeps travelling through the frozen world during Za Warudo.' },
     { name: 'Blood Drain', desc: 'Down Special drinks life out of a grabbed opponent and pours it straight back into Shadow DIO’s own bars.' },

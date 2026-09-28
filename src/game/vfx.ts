@@ -2,7 +2,7 @@
  * Signature VFX library. Every entry is a visually distinct effect so that
  * no two characters' moves look alike. Referenced by name from move definitions.
  */
-import { TECHNIQUE_PROFILES } from './techniques';
+import { AWAKENINGS } from './awakenings';
 import { ARC_STYLES, SWING_PROFILES, swingArc } from './animeFx';
 import type { MoveDef, TechniqueVisualStyle } from './types';
 import type { BossVfxKind } from './bossVfx';
@@ -11,17 +11,22 @@ export type VfxFn = (f: any, g: any, fr: number, m: any) => void;
 
 const R = Math.random;
 const front = (f: any, d = 46, y = -44) => [f.x + f.facing * d, f.y + y] as [number, number];
+/** Ultra Instinct platinum. Kept in one place so the silver reads as one material. */
+const PLAT = '#93c5fd';
 
-type TechniqueTier = 'limit' | 'awaken' | 'awakened';
+type TechniqueTier = 'awaken' | 'awakenLight' | 'awakenHeavy' | 'awakened';
 type TechniqueStance = 'neutral' | 'side' | 'down' | 'air';
 
 function techniqueVfx(profileId: string, tier: TechniqueTier, stance: TechniqueStance, f: any, g: any, fr: number, m: any) {
-  const profile = TECHNIQUE_PROFILES[profileId];
+  const profile = AWAKENINGS[profileId];
   if (!profile) return;
   const style: TechniqueVisualStyle = m.techniqueStyle || profile.style;
   const c1 = profile.color, c2 = profile.color2;
   const [x, y] = stance === 'down' ? [f.x, f.y - 8] as [number, number] : stance === 'air' ? [f.x + f.facing * 24, f.y - 44] as [number, number] : front(f, tier === 'awakened' ? 62 : 48, -46);
-  const power = tier === 'awakened' ? 1.35 : tier === 'limit' ? 1.12 : 0.9;
+  // Only the special tier is allowed to be the biggest thing on the screen; the
+  // awakened light is the smallest of the three, so it never out-shouts the move
+  // it is cancelling into.
+  const power = tier === 'awakened' ? 1.35 : tier === 'awakenHeavy' ? 1.2 : tier === 'awakenLight' ? 0.78 : 0.9;
 
   if (fr < m.startup) {
     // Anticipation: motes spiral inward, a ground ring tightens, then a hard flash
@@ -109,11 +114,11 @@ function techniqueVfx(profileId: string, tier: TechniqueTier, stance: TechniqueS
         break;
     }
     if (tier === 'awakened') { g.flashScreen(c2, .28); g.shake(12); }
-    // A release flash that scales with the tier, then a lingering core.
-    if (tier !== 'limit') {
-      g.fx.add({ x, y, color: '#ffffff', kind: 'glow', life: 8, size: (16 + 14 * power) });
-      g.fx.ring(x, y, 6, 44 * power, '#ffffff', 10, 3);
-    }
+    // A release flash that scales with the tier, then a lingering core. The
+    // awakened light gets the smallest one: a fast strike must not announce
+    // itself like the finisher it is usually cancelling into.
+    g.fx.add({ x, y, color: '#ffffff', kind: 'glow', life: 8, size: (16 + 14 * power) });
+    g.fx.ring(x, y, 6, 44 * power, '#ffffff', 10, 3);
   }
 
   if (fr > m.startup && fr % (stance === 'down' ? 3 : 4) === 0) {
@@ -125,7 +130,7 @@ function techniqueVfx(profileId: string, tier: TechniqueTier, stance: TechniqueS
 }
 
 function fallbackVfx(f: any, g: any, fr: number, m: any) {
-  const profile = TECHNIQUE_PROFILES[f.def?.id];
+  const profile = AWAKENINGS[f.def?.id];
   const c1 = profile?.color || f.look?.energy || '#ffffff';
   const c2 = profile?.color2 || f.look?.energy2 || '#ffffff';
   if (fr === m.startup) {
@@ -588,6 +593,129 @@ export const VFX: Record<string, VfxFn> = {
     }
     if (fr === m.startup) { g.fx.ring(f.x, f.y - 42, 8, 120, '#8affd0', 18, 7); g.fx.impact(f.x, f.y - 42, 90, '#ffffff'); g.shake(10); }
   },
+
+  // ==========================================================================
+  // GOKU · ULTRA INSTINCT
+  // Every one of these is built from the same additive vocabulary: a white-hot
+  // dual-pass bloom, a hard ring, and a burst of silver sparks. Nothing here
+  // uses a warm hue — the character is literally colourless energy.
+  // ==========================================================================
+  /** Ghost jab: a vacuum cone that collapses inward as the fist passes through. */
+  uiGhost: (f, g, fr, m) => {
+    if (fr !== m.startup) return;
+    const [x, y] = front(f, 40, -44);
+    const a = f.facing > 0 ? -0.12 : Math.PI + 0.12;
+    g.fx.slash(x, y, 30, a - 0.7, a + 0.7, f.facing, '#e2e8f0', 10, 8);
+    g.fx.ring(x, y, 26, 4, '#f8fafc', 9, 3);
+    g.fx.bloom(x, y, 30, '#e2e8f0', 12, 2.4);
+    for (let i = 0; i < 7; i++) g.fx.add({ x: x + f.facing * R() * 30, y: y - 16 + R() * 32, vx: -f.facing * (2 + R() * 4), vy: (R() - .5) * 3, color: i % 2 ? '#ffffff' : '#93c5fd', kind: 'spark', life: 12, size: 3 });
+  },
+  /** Impact beat: a double bloom plus the manga word. */
+  uiBurst: (f, g, fr, m) => {
+    if (fr !== m.startup) return;
+    const [x, y] = front(f, 48, -44);
+    // Silver, not white. A near-white decal at this size stops reading as light
+    // and starts reading as a sticker; the platinum body and the white core
+    // inside it do the work instead.
+    g.fx.bloom(x, y, 44, PLAT, 15, 3.4);
+    g.fx.impact(x, y, 38, '#cfe4fb');
+    g.fx.ring(x, y, 8, 84, PLAT, 13, 3.5);
+    g.fx.word(x, y - 62, 'ZASH!', '#dbeafe', 40, 26);
+    g.shake(6);
+  },
+  /** Aerial ring: a spinning silver torus seen edge-on. */
+  uiRing: (f, g, fr, m) => {
+    if (fr !== m.startup) return;
+    const y = f.y - 44;
+    for (let i = 0; i < 3; i++) {
+      const rx = 40 + i * 18, ry = 34 - i * 9;
+      g.fx.ring(f.x, y, rx, rx * 0.6, i === 1 ? '#ffffff' : '#93c5fd', 13 - i * 2, 4);
+      void ry;
+    }
+    g.fx.bloom(f.x, y, 46, '#e2e8f0', 15, 3);
+    for (let i = 0; i < 9; i++) { const a = R() * 6.28; g.fx.add({ x: f.x + Math.cos(a) * 44, y: y + Math.sin(a) * 40, vx: Math.cos(a) * 8, vy: Math.sin(a) * 8, color: '#f8fafc', kind: 'streak', life: 14, size: 3 }); }
+  },
+  /** Sonic boom cone: a stretched, forward-thrust lens. */
+  uiCone: (f, g, fr, m) => {
+    if (fr !== m.startup) return;
+    const [x, y] = front(f, 52, -44);
+    for (let i = 0; i < 3; i++) {
+      const k = 1 - i * 0.3;
+      g.fx.ring(x + f.facing * i * 12, y, 30 * k, 8 * k, i ? '#93c5fd' : '#ffffff', 10 - i, 3);
+    }
+    g.fx.bloom(x, y, 44, '#e0f2fe', 13, 3);
+    g.fx.directional(x, y, 6, f.facing > 0 ? 0 : Math.PI, 0.3, '#ffffff', 18, 'streak', 10, 2.5);
+  },
+  /** The sliding Kamehameha wave itself: a long, low, additive lens. */
+  uiBeam: (f, g, fr, m) => {
+    if (fr < m.startup) {
+      // Telegraph: the palms draw in and the light converges on the hands.
+      const k = fr / Math.max(1, m.startup);
+      if (fr % 2 === 0) {
+        const a = R() * 6.28, r = 96 * (1 - k) + 20;
+        g.fx.add({ x: f.x + f.facing * 54 + Math.cos(a) * r, y: f.y - 44 + Math.sin(a) * r, vx: -Math.cos(a) * 5, vy: -Math.sin(a) * 5, color: R() < .5 ? '#e0f2fe' : '#93c5fd', kind: 'glow', life: 14, size: 4 + k * 6 });
+      }
+      if (fr === m.startup - 1) { g.fx.bloom(f.x + f.facing * 56, f.y - 44, 40, '#e0f2fe', 12, 3); g.shake(6); }
+      return;
+    }
+    if (fr > m.dur - 4) return;
+    // The wave is a dense stream of additive streaks leaving the hands. Built
+    // from particles rather than one long polygon so it lands in the top
+    // additive pass and is never buried under the swing arc drawn after it.
+    if (fr % 2 === 0) {
+      for (let i = 0; i < 5; i++) {
+        const d = 18 + i * 30;
+        g.fx.add({
+          x: f.x + f.facing * d, y: f.y - 40 + (R() - .5) * 30,
+          vx: f.facing * (18 + R() * 12), vy: (R() - .5) * 3,
+          color: i % 2 ? '#e0f2fe' : '#93c5fd', kind: 'streak',
+          life: 11, size: 9 - i * 1.1, drag: 0.97,
+        });
+      }
+      g.fx.bloom(f.x + f.facing * 46, f.y - 40, 48, '#e0f2fe', 9, 3);
+      g.fx.bloom(f.x + f.facing * 120, f.y - 40, 36, '#93c5fd', 8, 5);
+      // The wave is surfacing, so a skirt of light skims the floor with it.
+      g.fx.bloom(f.x + f.facing * 80, f.y - 6, 28, '#93c5fd', 8, 8);
+    }
+  },
+  /** The Soaring Fist: three dissolving after-images down the rush line. */
+  uiRush: (f, g, fr, m) => {
+    if (fr < 3 || fr > m.dur) return;
+    if (fr % 3 === 0) {
+      g.fx.bloom(f.x + f.facing * 40, f.y - 44, 30, '#e2e8f0', 10, 2.6);
+      g.fx.directional(f.x, f.y - 44, 2, f.facing > 0 ? Math.PI : 0, 0.4, '#ffffff', 14, 'streak', 9, 2.4);
+    }
+  },
+  /** Autonomous Counter: a perfectly still, slowly closing shell. */
+  uiCounter: (f, g, fr, m) => {
+    if (fr > (m.counter?.[1] ?? m.dur)) return;
+    if (fr % 4 === 0) {
+      const k = 1 - fr / Math.max(1, m.counter?.[1] ?? m.dur);
+      g.fx.ring(f.x, f.y - 42, 70 * k + 10, 74 * k + 12, '#93c5fd', 14, 2.5);
+    }
+    if (fr % 2 === 0) {
+      const a = R() * 6.28, r = 70;
+      g.fx.add({ x: f.x + Math.cos(a) * r, y: f.y - 42 + Math.sin(a) * r, vx: -Math.cos(a) * 4, vy: -Math.sin(a) * 4, color: R() < .5 ? '#ffffff' : '#a5f3fc', kind: 'glow', life: 16, size: 5 });
+    }
+  },
+  /** The Supreme Godly Display: a collapsing corona behind the whole animation. */
+  uiUlt: (f, g, fr, m) => {
+    if (fr > m.dur) return;
+    const k = Math.min(1, fr / m.dur);
+    // Matter drawn inward along its own tangent. Concentric rings are avoided
+    // deliberately: stacking them on one centre produces a bullseye, which is
+    // the one shape a collapsing galaxy must never look like.
+    if (fr % 2 === 0) {
+      const a = R() * 6.28, r = 40 + k * 150;
+      g.fx.add({
+        x: f.x + Math.cos(a) * r, y: f.y - 44 + Math.sin(a) * r * .8,
+        vx: -Math.cos(a) * (4 + k * 20), vy: -Math.sin(a) * (4 + k * 20),
+        color: fr % 2 ? '#f8fafc' : '#93c5fd', kind: 'streak', life: 18, size: 3 + k * 5,
+      });
+    }
+    // Beat 3 only: the sphere itself collapsing, one bloom rather than a stack.
+    if (fr >= 78 && fr % 2 === 0) g.fx.bloom(f.x, f.y - 44, 22 + (fr - 78) * 7, '#e0f2fe', 10, 6);
+  },
 };
 
 // Cut angle follows the swing of the animation so every slash reads like the anime.
@@ -627,7 +755,7 @@ export function sukunaCuts(g: any, f: any, m: any, b: { x: number; y: number; w:
 export function runVfx(name: string | undefined, f: any, g: any, fr: number, m: any) {
   const id = f.def?.styleId || f.def?.id;
   const boss = id === 'sukuna' || id === 'gojo';
-  const profile = TECHNIQUE_PROFILES[id];
+  const profile = AWAKENINGS[id];
   const hits: MoveDef['hits'] = m.hits || [];
   // Use the same transform and active windows as Game's collision loop.
   // Refresh sparse geometry during motion rather than leaving a false hit area behind.
@@ -650,7 +778,10 @@ export function runVfx(name: string | undefined, f: any, g: any, fr: number, m: 
         }
       } else {
         const sp = SWING_PROFILES[id];
-        if (sp && fr === h.f[0]) {
+        // `quietHits` marks an attack that brings its own visual (a beam, a
+        // sustained wave). The generic swing would fire one giant arc across it,
+        // so those moves opt out entirely.
+        if (sp && !m.quietHits && fr === h.f[0]) {
           const cx = bounds.x + bounds.w / 2, cy = bounds.y + bounds.h / 2, r = Math.max(bounds.w, bounds.h) * .62 + 12;
           const arcStyle = ARC_STYLES.includes(sp.style) || (sp.style === 'lightning' && !/punch|kick|dkick|thrust|cast/.test(m.anim || ''));
           if (!arcStyle) g.fx.swing(cx + f.facing * bounds.w * .2, cy, r, 0, 0, sp, f.facing, 16, f.facing);

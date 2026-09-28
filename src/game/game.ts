@@ -3,17 +3,35 @@ import { CHARACTERS, charById, MoveKey } from './characters';
 import { Fighter } from './fighter';
 import { AI } from './ai';
 import { Effects } from './effects';
+import { ReplayBuffer } from './replay';
+import { ScreenDistortion } from './effects/screenDistortion';
 import { Projectile, ProjSpec } from './projectiles';
-import { Bindings, keyboard, readPlayerInput } from './input';
-import { drawShadow } from './render';
+import { Bindings, keyboard, keyLabel, readPlayerInput } from './input';
+import { drawContactShadow } from './render';
 import { SIGS } from './signatures';
 import { DummyMode, InputState, MatchConfig, MatchResult, Rect, emptyInput } from './types';
 import { sfx, fadeClip, unlockAudio, preloadClips } from './audio';
 import { preloadShrine } from './bossVfx';
 import { customMatchError, normalizeMatchConfig, TEAM_COLORS, TEAM_NAMES } from './matchConfig';
+import { JUGGLE_BUDGET, JUGGLE_POP, TIERS, tierOf, hitstopFrames, comboScale, comboKnockbackScale, launchDecay, MIN_DAMAGE_FRACTION, GAIN_ON_DEAL, GAIN_ON_TAKE, GAUGE_DRAIN } from './combat';
+import { AWAKEN_MOVES } from './fighter';
 
 export const FIGHTER_COLORS = ['#ff4757', '#3fa9ff', '#44e07a', '#ffb52e'];
 const STEP = 1000 / 60;
+/** Frames of no input handed back after a KO replay, so the blow can breathe. */
+const REPLAY_AFTERMATH = 54;
+/** Camera zoom, as a multiple of the base. See `settleCamera`. */
+const MIN_ZOOM_K = 0.5;
+const MAX_ZOOM_K = 1.34;
+/**
+ * The Ultra Instinct instant slip's internal gauge, in frames.
+ *
+ * Swept against a live fifteen-second exchange rather than picked: 120 let it
+ * fire four times and cut incoming damage by 62%; 200, 240 and 300 all landed on
+ * three fires and a 45% cut, because past that the cooldown is no longer what
+ * limits it. See `tryInstantSlip`.
+ */
+const SLIP_COOLDOWN = 200;
 
 const imgCache: Record<string, HTMLImageElement> = {};
 export function loadImage(src: string): HTMLImageElement {
@@ -41,7 +59,15 @@ export function dmgColor(d: number) {
 }
 const overlap = (a: Rect, b: Rect) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 const FX_COLORS: Record<string, string> = { elec: '#7fd8ff', fire: '#ff7a1a', dark: '#ff2040', purple: '#b067ff', blunt: '#ffffff' };
-const emptyCds = () => ({ nspec: 0, sspec: 0, dspec: 0, nex: 0, sex: 0, dex: 0, aex: 0, naw: 0, saw: 0, daw: 0, aaw: 0, aspec: 0, aig: 0 });
+/** A fresh cooldown book. The awakened tiers are per-stance, so all of them are listed. */
+const emptyCds = () => ({
+  nspec: 0, sspec: 0, dspec: 0, aspec: 0, aig: 0,
+  naw: 0, saw: 0, daw: 0, aaw: 0,
+  nwl: 0, swl: 0, dwl: 0, awl: 0,
+  nwh: 0, swh: 0, dwh: 0, awh: 0,
+  nfu: 0, sfu: 0, dfu: 0, afu: 0,
+  boss_heavy2: 0,
+});
 
 /** Physics source for knockback, plus the ultimate-meter policy for delayed events. */
 export interface HitSource { x: number; y: number; vx: number; vy: number; noMeter?: boolean; }
@@ -53,7 +79,7 @@ export interface GameOpts {
   preview?: string;
 }
 
-export type PreviewAction = 'light' | 'heavy' | 'special' | 'limit' | 'awaken' | 'ult';
+export type PreviewAction = 'light' | 'heavy' | 'special' | 'awaken' | 'awakened';
 export type PreviewStance = 'neutral' | 'side' | 'down' | 'air';
 export interface PreviewRequest { action: PreviewAction; stance: PreviewStance; followup?: boolean; label?: string; }
 
@@ -82,6 +108,67 @@ export class Game {
   prevPause = false;
   /** Per-fighter cleave audio gate, keyed by the frame the last slash played. */
   slashGate = new Map<Fighter, { frame: number; tier: 'light' | 'strong' }>();
+
+  // ===========================================================================
+  // SCREEN JUICE
+  // Three cheap, self-decaying systems that turn a correct simulation into a
+  // fight that *reads* like anime: negative frames, directional speed lines and
+  // a camera punch-in. All three are pure presentation — none of them touches
+  // the simulation, so they can never change a match result.
+  // ===========================================================================
+  /** Frames of high-contrast negative still to draw. Two is the classic amount. */
+  negFrames = 0;
+  /** Full-screen directional speed-line bursts. */
+  speedLines: { ang: number; life: number; max: number; seed: number; power: number }[] = [];
+  /** Camera punch-in: zoom and centre offset applied on top of the normal follow. */
+  punch = { t: 0, x: 0, y: 0, mag: 0 };
+  /** Radial lens ripple: the frame itself bends on a cinematic impact. */
+  distortion = new ScreenDistortion();
+  /**
+   * KO REPLAY. A ring buffer of the last few seconds, so every knockout can be
+   * played back: five seconds of lead-in, the blow, then the live aftermath.
+   * Purely presentational - the simulation is simply not stepped while it runs.
+   */
+  replay = new ReplayBuffer();
+  /** Frames of "no input" left after a replay, so the KO can breathe. */
+  private postReplayLock = 0;
+  /** Frames of replay shown. The world clock is frozen, so it needs its own. */
+  private replayTick = 0;
+  /**
+   * NEGATIVE FRAME — the two-frame photographic inversion that shonen films cut
+   * to on a fatal blow. Only two frames: any longer and the audience stops
+   * reading the fight behind it.
+   */
+  negativeFrames(frames = 2) { this.negFrames = Math.max(this.negFrames, Math.max(1, Math.round(frames))); }
+
+  /**
+   * DIRECTIONAL SPEED LINES — a full-screen radial burst. `ang` is the
+   * direction the lines streak *toward* the viewer, so it is passed the travel
+   * direction of whatever triggered it.
+   */
+  speedBurst(ang: number, power = 1) {
+    if (this.speedLines.length >= 6) this.speedLines.shift();
+    this.speedLines.push({
+      ang, power: Math.max(0.2, Math.min(2.2, power)),
+      life: 14, max: 14, seed: Math.random() * 10,
+    });
+  }
+
+  /** CAMERA PUNCH-IN — a hard zoom onto the impact, springing back out. */
+  punchIn(x: number, y: number, mag = 0.15) {
+    this.punch.x = x; this.punch.y = y; this.punch.mag = Math.max(this.punch.mag, Math.max(0, Math.min(0.35, mag)));
+    this.punch.t = Math.max(this.punch.t, 10);
+  }
+
+  /**
+   * RADIAL LENS DISTORTION — bends the whole frame around a world point. Used
+   * for the handful of beats that have to feel cinematic (a counter that phases
+   * behind you, a galaxy collapsing) rather than merely heavy.
+   */
+  distortAt(x: number, y: number, strength = 14, frames = 18) {
+    const [, sy] = this.worldToScreen(x, y);
+    this.distortion.pulse(sy * this.dpr, strength, frames, 1);
+  }
 
   // ---------- time stop (Shadow DIO · Za Warudo) ----------
   /**
@@ -114,6 +201,9 @@ export class Game {
   private pendingDamage: { owner: Fighter; target: Fighter; h: any; dir: number; ix: number; iy: number }[] = [];
   private timeStopCanvas: HTMLCanvasElement | null = null;
   private timeStopCtx: CanvasRenderingContext2D | null = null;
+  /** Half-res scratch framebuffer used by the negative-frame composite. */
+  private juiceCanvas: HTMLCanvasElement | null = null;
+  private juiceCtx: CanvasRenderingContext2D | null = null;
   private timeStopRealAccum = 0;
   readonly TIME_STOP_MS = 5000;
   readonly TIME_STOP_STEPS = 300;
@@ -123,6 +213,8 @@ export class Game {
   previewFrame = 0;
   previewFollowupFired = false;
   previewCounterPending = false;
+  /** The awakened showcase is two presses, not one: the transformation, then the button. */
+  previewAwakenSpent = false;
 
   constructor(canvas: HTMLCanvasElement, cfg: MatchConfig, opts: GameOpts) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d')!; this.cfg = normalizeMatchConfig(cfg); this.opts = opts;
@@ -177,6 +269,59 @@ export class Game {
 
   baseZoom() { return Math.min(this.W / 1500, this.H / 850) * 1.25; }
 
+  /**
+   * The stage the camera is allowed to see, in world units.
+   *
+   * Colliders, not blast zones: the blast box is a kill plane out in empty sky,
+   * and framing to it would push the ground off the bottom of the screen.
+   */
+  private stageBounds() {
+    const s = this.arena.solids;
+    if (!s || !s.length) return null;
+    let l = Infinity, r = -Infinity, bottom = -Infinity;
+    for (const q of s) { l = Math.min(l, q.x); r = Math.max(r, q.x + q.w); bottom = Math.max(bottom, q.y + q.h); }
+    return { l, r, bottom, top: this.arena.blast.t };
+  }
+
+  /**
+   * Camera ceiling and stage clamp, applied last so it cannot be fed back into
+   * the next frame's framing.
+   *
+   * Zoom used to be free. The follow solve could ask for base*1.15, a cinematic
+   * asked for base*1.7, and a punch then *multiplied* whatever it was handed by
+   * up to 1.35 - so an ultimate landing inside a cinematic reached roughly 2.3x
+   * base, close enough to the fighters' own height that the fight stopped being
+   * readable. One hard ceiling makes every one of those effects safe to stack.
+   */
+  private settleCamera() {
+    const bz = this.baseZoom();
+    this.cam.z = Math.max(bz * MIN_ZOOM_K, Math.min(bz * MAX_ZOOM_K, this.cam.z));
+    const sb = this.stageBounds();
+    if (!sb) return;
+    const halfW = this.W / this.cam.z / 2, halfH = this.H / this.cam.z / 2;
+    // Horizontal: keep the whole visible width on the stage, or centre it when
+    // the stage is narrower than the view.
+    //
+    // A fighter the blast has thrown past the edge of the stage is pulled into
+    // the allowed range. Losing sight of your own character is a far worse
+    // failure than briefly seeing the edge of the world, and the stage is only
+    // 1040 units wide against a 2800-unit blast zone - so without this, a
+    // hard launch sends the loser off camera and you never see the KO land.
+    let l = sb.l, r = sb.r;
+    for (const f of this.fighters) {
+      if (!f.alive) continue;
+      l = Math.min(l, f.x - 150);
+      r = Math.max(r, f.x + 150);
+    }
+    this.cam.x = (r - l) <= halfW * 2 ? (l + r) / 2 : Math.max(l + halfW, Math.min(r - halfW, this.cam.x));
+    // Vertical: never sink into the ground, never fly out past the kill plane -
+    // and never lose a fighter that is above the stage.
+    let top = sb.top;
+    for (const f of this.fighters) if (f.alive) top = Math.min(top, f.y - halfH * 0.6);
+    const lo = top + halfH, hi = sb.bottom - 40 - halfH;
+    this.cam.y = lo >= hi ? (top + sb.bottom) / 2 - halfH * 0.35 : Math.max(lo, Math.min(hi, this.cam.y));
+  }
+
   resize() {
     const r = this.canvas.getBoundingClientRect();
     this.dpr = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -190,22 +335,66 @@ export class Game {
     window.addEventListener('keydown', unlockAudio, { once: true });
     const tick = (now: number) => {
       if (!this.running) return;
-      const dt = Math.min(100, now - this.last); this.last = now;
-      if (!this.opts.preview) {
-        const pin = readPlayerInput(this.opts.bindings);
-        if (pin.pause && !this.prevPause && !this.ended) this.opts.onPauseKey?.();
-        this.prevPause = pin.pause;
-      }
-      if (!this.paused) {
-        this.acc += dt * this.timeScale;
-        let n = 0;
-        while (this.acc >= STEP && n < 4) { this.step(); this.acc -= STEP; n++; }
-        if (n === 4) this.acc = 0;
-      }
-      this.render();
+      this.runFrame(now);
       this.raf = requestAnimationFrame(tick);
     };
     this.raf = requestAnimationFrame(tick);
+  }
+
+  /**
+   * One animation frame, behind the loop's fault boundary.
+   *
+   * The frame callback is the one piece of this game with no caller above it.
+   * Anything thrown in there escapes into the browser, the `requestAnimationFrame`
+   * re-arm never runs, and the whole match hangs on its last painted frame: no
+   * error, no crash, no way out. That is exactly what a KO replay used to do.
+   * So the boundary lives here - the fault is absorbed, reported once, and the
+   * loop keeps running, because a frozen game cannot be debugged, inspected or
+   * quit.
+   */
+  runFrame(now: number) {
+    try { this.frame_(now); }
+    catch (error) { this.reportFault(error); }
+  }
+
+  /** One animation frame. Split out of the callback so the callback can wrap it. */
+  private frame_(now: number) {
+    const dt = Math.min(100, now - this.last); this.last = now;
+    if (!this.opts.preview) {
+      const pin = readPlayerInput(this.opts.bindings);
+      if (pin.pause && !this.prevPause && !this.ended) this.opts.onPauseKey?.();
+      this.prevPause = pin.pause;
+    }
+    if (!this.paused) {
+      // A replay runs on wall time. The match's own end-of-match slow motion is
+      // deliberately ignored while one is on screen: it would otherwise turn a
+      // seven-second knockout replay into twenty seconds that look like a hang.
+      this.acc += dt * (this.replay.ownsScreen ? 1 : this.timeScale);
+      let n = 0;
+      while (this.acc >= STEP && n < 4) { this.step(); this.acc -= STEP; n++; }
+      if (n === 4) this.acc = 0;
+    }
+    this.render();
+  }
+
+  /**
+   * A fault raised by the simulation or the renderer.
+   *
+   * Reported once per distinct message so a systemic problem is visible in the
+   * console instead of drowned by it, and counted so the pause screen can admit
+   * the match is degraded instead of pretending nothing happened. The loop keeps
+   * running either way.
+   */
+  private reportedFaults = new Set<string>();
+  faults = 0;
+  lastFault: string | null = null;
+  private reportFault(error: unknown) {
+    this.faults++;
+    const message = error instanceof Error ? error.message : String(error);
+    this.lastFault = message;
+    if (this.reportedFaults.has(message)) return;
+    this.reportedFaults.add(message);
+    if (typeof console !== 'undefined') console.error('[combat] frame fault (match kept running):', error);
   }
   stop() { this.disposed = true; this.running = false; cancelAnimationFrame(this.raf); window.removeEventListener('pointerdown', unlockAudio); window.removeEventListener('keydown', unlockAudio); this.timeStop.active = false; this.timeStop.owner = null; for (const f of this.fighters) f.frozen = false; }
   setPaused(p: boolean) {
@@ -300,22 +489,25 @@ export class Game {
   shake(n: number) { this.shakeAmt = Math.max(this.shakeAmt, n); }
   flashScreen(c: string, a: number) { this.flash = { c, a: Math.max(this.flash.a, a) }; }
 
-  // ---------- ultimate meter policy ----------
+  // ---------- awakening gauge policy ----------
   /**
    * The one shared rule that decides whether a hit may feed the attacker's
-   * ultimate meter. It lives in the damage pipeline so it applies to melee,
-   * projectiles, explosions, damage-over-time, multi-hit ultimates and damage
-   * that is only registered later (for example Shadow DIO's Time Stop release).
+   * Awakening gauge. It lives in the damage pipeline so it applies to melee,
+   * projectiles, explosions, damage-over-time, multi-hit awakened moves and
+   * damage that is only registered later (for example Shadow DIO's Time Stop
+   * release).
    *
-   * A fighter never earns meter from their own awakening state or their own
-   * ultimate. `src.noMeter` lets a caller carry that fact across a delay.
+   * A fighter never earns gauge from their own Awakening. `src.noMeter` lets a
+   * caller carry that fact across a delay.
    */
   meterLocked(A: Fighter, h?: any, src?: HitSource): boolean {
     if (src && src.noMeter) return true;
     if (h && h.ultLocked) return true;
-    if (A.moveKey === 'ult') return true;
+    // `awakenSealedT` covers the frames just after the state closed, so the blow
+    // that emptied the gauge cannot be the blow that refills it.
+    if (A.awakened || A.awakenSealedT > 0) return true;
     const ability = A.move?.ability;
-    return ability === 'awaken' || ability === 'awakened' || A.godT > 0 || A.devilT > 0;
+    return ability === 'awaken' || ability === 'awakenLight' || ability === 'awakenHeavy' || ability === 'awakened';
   }
 
   // ---------- character audio ----------
@@ -388,7 +580,7 @@ export class Game {
     const o = this.timeStop.owner;
     if (!o) return true;
     if (!o.alive) return true;
-    return !(o.state === 'attack' && o.moveKey === 'ult');
+    return !(o.state === 'attack' && o.move?.ability === 'awakened');
   }
   /** True when this fighter is being held in suspended time. */
   timeFrozen(f: Fighter) { return this.timeStop.active && this.timeStop.owner !== f; }
@@ -462,6 +654,126 @@ export class Game {
   /** Wall-clock reading used only to pace the time stop; never for the sim. */
   private lastReal = 0;
 
+  /**
+   * DIRECTIONAL ANIME SPEED LINES.
+   *
+   * Drawn in screen space after the world and before the HUD, because the whole
+   * point is to read as a *panel* effect rather than as something in the arena:
+   * tapered rays converging on a vanishing point, streaking against the
+   * direction of travel, with a clear hole in the middle so the fighters are
+   * never hidden by their own momentum.
+   */
+  private drawSpeedLines(ctx: CanvasRenderingContext2D) {
+    if (!this.speedLines.length) return;
+    const W = this.W, H = this.H;
+    const cx = W / 2, cy = H / 2;
+    const R = Math.hypot(W, H) * 0.62;
+    const RAYS = 30, SPREAD = 1.15;      // fan width in radians
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of this.speedLines) {
+      const k = s.life / s.max;               // 1 → 0
+      const punch = Math.pow(k, 0.6) * s.power;
+      // The fan points *away* from the travel direction, so the rays streak
+      // backwards out of the vanishing point like a real panel effect.
+      const back = s.ang + Math.PI;
+      // The hole in the middle opens up as the burst dies, so the fighters are
+      // never buried under their own momentum.
+      const inner = R * (0.36 - 0.12 * (1 - k));
+      for (let i = 0; i < RAYS; i++) {
+        // Seeded per-ray jitter: stable for the life of the burst, so the fan
+        // does not strobe on the frames it is visible.
+        const j = (Math.sin(i * 12.9898 + s.seed * 78.233) * 43758.5453) % 1;
+        const jr = Math.abs(j);
+        const a = back + (i / (RAYS - 1) - 0.5) * SPREAD * (0.7 + jr * 0.6);
+        const rx = Math.cos(a), ry = Math.sin(a);
+        const nx = -ry, ny = rx;               // unit normal to the ray
+        const outer = R * (0.72 + jr * 0.42);
+        // Tapered quad: hairline at the vanishing point, blade at the rim. This
+        // is the shape that reads as a drawn speed line rather than a streak.
+        // Kept thin on purpose - this is punctuation. Anything heavier stops
+        // being a speed line and becomes a screen wipe.
+        const wIn = 0.5 + jr * 0.9;
+        const wOut = wIn + 1.6 + jr * 3.4;
+        ctx.globalAlpha = punch * (0.05 + jr * 0.17);
+        ctx.fillStyle = i % 5 === 0 ? '#ffffff' : i % 3 === 0 ? '#dbe9ff' : '#8fc7ff';
+        ctx.beginPath();
+        ctx.moveTo(cx + rx * inner + nx * wIn, cy + ry * inner + ny * wIn);
+        ctx.lineTo(cx + rx * outer + nx * wOut, cy + ry * outer + ny * wOut);
+        ctx.lineTo(cx + rx * outer - nx * wOut, cy + ry * outer - ny * wOut);
+        ctx.lineTo(cx + rx * inner - nx * wIn, cy + ry * inner - ny * wIn);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // Radial bloom over the centre keeps the fan from looking like loose sticks.
+    ctx.globalAlpha = 1;
+    const g = ctx.createRadialGradient(cx, cy, 1, cx, cy, R * 0.7);
+    g.addColorStop(0, 'rgba(255,255,255,0)');
+    g.addColorStop(0.62, 'rgba(255,255,255,0)');
+    g.addColorStop(1, 'rgba(190,220,255,0.10)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  /**
+   * NEGATIVE FRAME INVERSION.
+   *
+   * The two-frame high-contrast photographic negative that shonen films cut to
+   * on a fatal blow. The primary path re-composites the finished frame through
+   * `filter: invert(100%) contrast(150%)`. A `difference` wash against white is
+   * layered underneath unconditionally, so the effect still lands on a browser
+   * that does not implement `ctx.filter` — the same graceful degradation the
+   * time-stop desaturation uses.
+   */
+  private compositeNegative(ctx: CanvasRenderingContext2D) {
+    if (this.negFrames <= 0) return;
+    const W = this.W, H = this.H;
+    const k = this.negFrames >= 2 ? 1 : this.negFrames;
+    ctx.save();
+    // Guaranteed path: `difference` against white is a true photographic inverse.
+    ctx.globalCompositeOperation = 'difference';
+    ctx.globalAlpha = 0.92 * k;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    // Preferred path: the real filter, which also lifts contrast so the negative
+    // snaps rather than merely turning pale. Its own half-res buffer: the time
+    // stop already owns the shared one, and two effects must never alias.
+    const off = this.ensureJuiceBuffer();
+    if (off) {
+      const buf = this.juiceCanvas!;
+      off.setTransform(1, 0, 0, 1, 0, 0);
+      off.clearRect(0, 0, buf.width, buf.height);
+      off.drawImage(this.canvas, 0, 0, buf.width, buf.height);
+      const filter = (ctx as any).filter;
+      if (typeof filter === 'string' || filter === undefined) {
+        try { ctx.filter = 'invert(100%) contrast(150%)'; } catch { ctx.filter = 'none'; }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.95 * k;
+      ctx.drawImage(buf, 0, 0, W, H);
+      ctx.filter = 'none';
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /** Half-resolution scratch framebuffer for the negative-frame composite. */
+  private ensureJuiceBuffer(): CanvasRenderingContext2D | null {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const w = Math.max(2, Math.ceil(this.W * this.dpr * 0.5));
+    const h = Math.max(2, Math.ceil(this.H * this.dpr * 0.5));
+    if (!this.juiceCanvas) {
+      this.juiceCanvas = document.createElement('canvas');
+      this.juiceCtx = this.juiceCanvas.getContext('2d');
+    }
+    if (this.juiceCanvas.width !== w || this.juiceCanvas.height !== h) {
+      this.juiceCanvas.width = w; this.juiceCanvas.height = h;
+    }
+    return this.juiceCtx;
+  }
+
   cinematic(f: Fighter, name?: string, frames = 70) {
     sfx('ult');
     if (this.opts.preview) return;
@@ -472,10 +784,87 @@ export class Game {
     // default every projectile to its owner's signature energy colours
     if (!s.col) s.col = s.owner?.look?.energy || '#ff7a1a';
     if (!s.col2) s.col2 = s.owner?.look?.energy2 || '#ffd24a';
-    // Snapshot the meter policy at spawn: a lingering ultimate projectile must
-    // stay barred from generating meter even after its caster's animation ends.
+    // Snapshot the gauge policy at spawn: a lingering shot must stay barred from
+    // generating gauge even after its caster's animation ends.
     if (s.ultLocked === undefined) s.ultLocked = this.meterLocked(s.owner);
+    /**
+     * A retained set-piece scales everything it throws.
+     *
+     * Its melee hits are scaled when the move is built, but a domain's real
+     * damage usually arrives on a projectile its choreography spawns, and a
+     * "weakened" ultimate whose blast still hits for 34 is not weakened. Read
+     * off the *owner's current move*, so it applies to exactly the frames the
+     * set-piece is casting and nothing after.
+     */
+    const power = s.owner?.move?.domainPower;
+    if (power !== undefined && power !== 1) {
+      s.dmg = (s.dmg ?? 0) * power;
+      if (s.fin) s.fin = { ...s.fin, dmg: s.fin.dmg * power, kb: s.fin.kb * power, sc: s.fin.sc * power };
+    }
     this.projectiles.push(new Projectile(s));
+  }
+
+  /**
+   * ULTRA INSTINCT — MIGATTE NO GOKUI (movement without thought).
+   *
+   * When a silver-haired fighter is in a neutral, walking or dodge-frame state
+   * and a *non-ultimate* hitbox is about to connect, the body simply is not
+   * there any more: a 30 px instant slip, a silver after-image, and the incoming
+   * hitstun is cancelled outright.
+   *
+   * Fairness is deliberate and enforced here, not hoped for:
+   *  - ultimates and anything the meter has locked out are exempt, so a
+   *    committed super can always punish a whiffed read;
+   *  - a 3.3-second internal gauge (`evadeCD`). This was measured, not guessed:
+   *    over a fifteen-second exchange against a hard CPU, a 2s gauge let the slip
+   *    fire four times and cut incoming damage from 53 to 20, while 3.3s and
+   *    anything longer all landed on three fires and 29. Past that point the
+   *    cooldown stops being the limit - what limits it is how often he is even
+   *    standing still when a hitbox arrives - so a longer gauge would only be a
+   *    number on paper.
+   *  - a fighter already in hitstun, in hitstop, or already invulnerable is
+   *    never eligible, so the passive cannot rescue a bad position. This is what
+   *    keeps it from extending combos: the first hit of an exchange can be
+   *    slipped, but the follow-ups land on a body that is already in hitstun.
+   *
+   * A meter cost was tried here and removed. Meter accrues at 0.4 per damage
+   * *taken*, so a player who relies on this passive never accumulates enough to
+   * pay for it, and the ability the whole character is named after silently
+   * switched itself off. The gauge is the honest lever.
+   *
+   * Returns true when the slip consumed the hit.
+   */
+  private tryInstantSlip(T: Fighter, A: Fighter, h: { dmg?: number }): boolean {
+    if (T.def.id !== 'goku_ui') return false;
+    if (T.evadeCD > 0 || T.invuln > 0 || T.hitstop > 0) return false;
+    if (T.state === 'hitstun' || T.state === 'ko' || T.state === 'wall') return false;
+    // Mid-attack is a commitment. The one exception is the Autonomous Counter,
+    // whose entire design is to be standing still when the blow arrives.
+    const reading = T.state === 'attack' && T.moveKey === 'dspec' && !!T.move?.counter;
+    if (T.state === 'attack' && !reading) return false;
+    // A transformation's blow always lands: a slip would make the Awakening
+    // unreactable. `meterLocked` is the engine's own definition of "this blow
+    // belongs to a transformation", so the rule cannot drift from the rest.
+    if (this.meterLocked(A, h as any)) return false;
+
+    const away = T.x >= A.x ? 1 : -1;
+    T.evadeCD = SLIP_COOLDOWN;                           // the internal gauge
+    T.evadeT = 16;                                       // silver after-image window
+    T.invuln = Math.max(T.invuln, 10);                   // the slip itself is intangible
+    T.x += away * 30 * T.scale;
+    T.vx = away * 11;
+    if (!T.grounded) T.vy = Math.min(T.vy, -1.5);
+    T.hitstun = 0; T.move = null; T.moveKey = null; T.ultTarget = null;
+    T.state = T.grounded ? 'idle' : 'air'; T.stateT = 0;
+    sfx('ui_slip'); sfx('ui_chime');
+    // A supersonic whoosh line through the vacated space.
+    this.fx.ring(T.x - away * 18 * T.scale, T.y - 40, 6, 74, '#e2e8f0', 16, 5);
+    this.fx.bloom(T.x - away * 16 * T.scale, T.y - 40, 34, '#93c5fd', 14, 2.2);
+    this.fx.impact(T.x - away * 20 * T.scale, T.y - 40, 46, '#e2e8f0');
+    this.fx.directional(T.x - away * 22 * T.scale, T.y - 40, 12, away > 0 ? Math.PI : 0, 0.5, '#ffffff', 15, 'streak', 14, 3);
+    this.fx.text(T.x + away * 44 * T.scale, T.y - 96, 'SLIP', '#e2e8f0', 22, 26);
+    this.shake(4);
+    return true;
   }
 
   applyHit(A: Fighter, T: Fighter, h: { dmg: number; ang: number; kb: number; sc: number; fx?: any; stun?: number; pull?: boolean; ultLocked?: boolean }, dir: number, ix: number, iy: number, force = false, src?: HitSource): boolean {
@@ -484,32 +873,86 @@ export class Game {
     if (T.state === 'attack' && T.move?.counter && T.moveFrame >= T.move.counter[0] && T.moveFrame <= T.move.counter[1] && T.move.onCounter) {
       T.move.onCounter(T, A, this); return false;
     }
+    if (this.tryInstantSlip(T, A, h)) return false;
+    // Captured before the hit resolves, because "was he already swinging?" is the
+    // whole definition of a counter hit and T.state is about to become hitstun.
+    const counterHit = T.state === 'attack' && !!T.move;
+    const tier = TIERS[tierOf(A.move?.ability, A.moveKey)];
+    const setPieceHit = A.move?.ability === 'awakened' || A.move?.ability === 'awaken';
     const cursedExecution = A.def.id === 'sukuna' && (h.fx === 'slash' || h.fx === 'dark') && T.damage >= 100 ? 1.18 : 1;
     const blackFlashBonus = A.def.id === 'sukuna' && A.sukunaBlackFlash ? 1.75 : 1;
     // Stale-move decay: repeating the same move in a short window weakens it.
     const recent = A.recentMoves.filter((r) => r.frame > this.frame - 300 && r.key === A.moveKey).length;
     const stale = A.moveKey ? Math.max(.6, 1 - Math.max(0, recent - 1) * .13) : 1;
-    const dmg = (h.dmg * stale * A.dmgMul() * cursedExecution * blackFlashBonus + (A.godT > 0 && h.fx === 'elec' ? 2 : 0)) * this.damageMultiplier(A);
+    /**
+     * COMBO SCALING.
+     *
+     * `comboHits` is read *before* it is incremented below, so the first hit of a
+     * sequence is unscaled and the tenth has given up most of its face value.
+     * Damage falls slower than knockback on purpose: a long string should still
+     * pay, but a long string should stop being able to launch - otherwise the tail
+     * of a combo is both free and infinite.
+     */
+    const seq = T.comboTimer > 0 ? T.comboHits : 0;
+    const dScale = comboScale(seq + 1);
+    const kScale = comboKnockbackScale(seq + 1);
+    const raw = h.dmg * stale * A.dmgMul() * cursedExecution * blackFlashBonus + (A.godT > 0 && h.fx === 'elec' ? 2 : 0);
+    // A combo is never allowed to fully zero out: chip pressure is the point of
+    // keeping a string going, and a hard cutoff turns long strings into whiffs.
+    const scaled = Math.max(raw * dScale, raw * MIN_DAMAGE_FRACTION);
+    const dmg = (tier.damage === 1 ? scaled : scaled * tier.damage) * this.damageMultiplier(A);
     const hp = this.health.get(T);
     if (hp) hp.current = Math.max(0, hp.current - dmg);
     T.damage += dmg; A.dmgDealt += dmg; T.dmgTaken += dmg; A.hitsLanded++;
     if (this.lockDamage !== null && this.cfg.rule === 'training' && T.isCPU) T.damage = this.lockDamage;
-    // Universal rule: an awakening or an ultimate never feeds its own meter.
-    if (!this.meterLocked(A, h, src)) A.meter = Math.min(100, A.meter + dmg * 0.9);
-    T.meter = Math.min(100, T.meter + dmg * 0.4);
-    const kb = (h.kb + h.sc * (hp ? 0 : T.damage / 100) * 1.25) / T.def.stats.weight * (A.devilT > 0 ? 1.1 : 1) * this.knockbackMultiplier(A);
+    // Universal rule: an Awakening never feeds its own gauge.
+    if (!this.meterLocked(A, h, src)) A.meter = Math.min(100, A.meter + dmg * GAIN_ON_DEAL);
+    T.meter = Math.min(100, T.meter + dmg * GAIN_ON_TAKE);
+    /**
+     * JUGGLE BUDGET AND LAUNCH DECAY.
+     *
+     * A hit that would put an airborne body back up spends one of its re-launch
+     * chances; past the budget it is converted into a shove instead. Separately,
+     * the n-th launch of a sequence launches less far, so the move a player
+     * spams at the edge of the stage stops working before it stops being fun.
+     */
+    const lifts = h.ang > 30 && h.ang < 150;
+    let launching = lifts && !h.pull && T.damage > 0;
+    // Touching the floor is where a juggle is paid back. Read before the launch
+    // decision, so a grounded body always starts the next string with a full
+    // budget - a target that lands and is immediately lifted again is a new
+    // juggle, not the tail of the old one.
+    if (T.grounded) { T.juggleCount = 0; T.juggleLeft = JUGGLE_BUDGET; }
+    if (launching && !T.grounded) {
+      if (T.juggleLeft <= 0) launching = false;
+      else T.juggleLeft--;
+    }
+    // A lift aimed at a body that is already up and out of chances. Read after the
+    // budget, so "refused" means refused rather than "not considered".
+    const budgetSpent = lifts && !h.pull && !T.grounded && T.damage > 0 && !launching;
+    const decay = launchDecay(T.juggleCount + 1);
+    const kb = (h.kb * (launching ? decay : 1) + h.sc * (hp ? 0 : T.damage / 100) * 1.25)
+      / T.def.stats.weight
+      * tier.knockback * kScale
+      * (A.devilT > 0 ? 1.1 : 1)
+      * this.knockbackMultiplier(A);
     const rad = (h.ang * Math.PI) / 180;
     let vx = Math.cos(rad) * kb * dir, vy = -Math.sin(rad) * kb;
-    if (T.grounded && vy > 0) vy = -vy * 0.6;
+    // Spending the last of the budget leaves the body falling rather than
+    // floating: the juggle ends, visibly. Without this the refusal would only
+    // have skipped the decay, and a spammed launcher would keep launching at
+    // full strength - which is the exact infinite the budget exists to stop.
+    if (budgetSpent) vy = Math.max(vy, -JUGGLE_POP);
     if (h.pull) {
       const S = src || { x: A.x + dir * 30 * A.scale, y: A.y - 10, vx: A.vx, vy: A.vy };
       T.vx = (S.vx * 0.85 + (S.x - T.x) * 0.12) * this.knockbackMultiplier(A);
       T.vy = (S.vy * 0.85 + (S.y - T.y) * 0.1 - 0.5) * this.knockbackMultiplier(A);
-      T.hitstun = 16 + (h.stun || 0);
+      T.hitstun = 16 + (h.stun || 0) + tier.stun;
     } else {
       T.vx = vx; T.vy = vy;
-      T.hitstun = Math.floor(8 + kb * 2.3) + (h.stun || 0);
+      T.hitstun = Math.floor(8 + kb * 2.3) + (h.stun || 0) + tier.stun;
     }
+    if (launching) T.juggleCount++;
     T.state = 'hitstun'; T.move = null; T.moveKey = null; T.ultTarget = null; T.stateT = 0;
     if (T.vy < 0) T.grounded = false;
     T.fastFall = false; T.airDodgeUsed = false; T.recoveryUsed = false; T.jumps = Math.max(T.jumps, 1);
@@ -517,16 +960,33 @@ export class Game {
     T.comboHits++; T.comboDmg += dmg; T.comboTimer = 45;
     // Impact weight scales with the blow, so a jab and a launcher never read alike.
     const weight = Math.min(1, dmg / 24);
-    const hs = h.pull ? 2 : Math.round(3 + dmg * 0.34 + (kb > 12 ? 5 : 0) + weight * 6);
-    A.hitstop = Math.max(A.hitstop, hs); T.hitstop = Math.max(T.hitstop, hs);
+    const hs = h.pull ? 2 : hitstopFrames(tier, dmg, kb);
+    /**
+     * A field its own caster is standing inside does not freeze that caster.
+     *
+     * A Domain re-cuts on a timer for five seconds. If every one of those cuts
+     * spent hitstop on the attacker, the caster would spend the whole set-piece
+     * frozen and its choreography would run at a fifth of its authored speed -
+     * the freeze would be fighting the animation frame for frame. The victim
+     * still takes the full stop; only the man holding the field is exempt.
+     */
+    const ownField = !!(h as any).data?.domain;
+    A.hitstop = Math.max(A.hitstop, ownField ? 0 : hs);
+    T.hitstop = Math.max(T.hitstop, hs);
     T.flashT = 6;
     // FX
     // hit sparks always use the attacker's signature colour so no two fighters read alike
     const base = FX_COLORS[h.fx as string];
     const col = !h.fx || h.fx === 'slash' || h.fx === 'blunt' ? A.look.energy : base || A.look.energy;
-    this.fx.burst(ix, iy, 5 + Math.floor(dmg * 0.9), col, 4.5 + kb * 0.4, 'spark', 20, 4);
-    this.fx.add({ x: ix, y: iy, color: col, kind: 'glow', life: 10, size: 12 + dmg * 1.2 });
-    this.fx.ring(ix, iy, 5, 20 + dmg * 3, col, 12, 4 + weight * 4);
+    // A sustained beam re-hits on a short cadence, so the full per-contact
+    // punctuation stacks dozens of rings and glow discs on one point and buries
+    // the shot. Those moves opt out and rely on their own visuals.
+    const quiet = A.move?.quietHits === true;
+    this.fx.burst(ix, iy, quiet ? 3 : 5 + Math.floor(dmg * 0.9), col, 4.5 + kb * 0.4, 'spark', 20, 4);
+    if (!quiet) {
+      this.fx.add({ x: ix, y: iy, color: col, kind: 'glow', life: 10, size: 12 + dmg * 1.2 });
+      this.fx.ring(ix, iy, 5, 20 + dmg * 3, col, 12, 4 + weight * 4);
+    }
     if (!h.pull && kb > 9) this.fx.directional(ix, iy, 8 + Math.floor(weight * 8), Math.atan2(vy, vx), 0.6, '#ffffff', 14, 'streak', 16, 3);
     if (h.fx === 'elec') { for (let i = 0; i < 3; i++) this.fx.bolt(ix, iy, ix + (Math.random() - .5) * 90, iy + (Math.random() - .5) * 90, '#7fd8ff', 7, 2); }
     if (h.fx === 'fire') for (let i = 0; i < 6; i++) this.fx.add({ x: ix, y: iy, vx: (Math.random() - .5) * 6, vy: -Math.random() * 5, color: '#ff7a1a', kind: 'ember', life: 26, size: 9 });
@@ -540,7 +1000,12 @@ export class Game {
     if (h.fx === 'purple') this.fx.ring(ix, iy, 10, 80, '#b067ff', 16, 8);
     if (!h.pull) {
       this.shake(Math.min(26, 2 + kb * 0.6 + weight * 6));
-      if (dmg >= 6 || kb > 9) this.fx.impact(ix, iy, 22 + dmg * 2.6 + kb * 1.5, col);
+      // Decal scale is bounded. A fighter is about 78 world units tall, and these
+      // radii used to run past 70 on a heavy blow - a sticker wider than the man
+      // it is attached to, which buries the pose the hit was supposed to sell.
+      // Capped, and the manga star shrinks as the blow gets heavier so the read
+      // stays "one big hit" rather than "a bigger sticker".
+      if (!quiet && (dmg >= 6 || kb > 9)) this.fx.impact(ix, iy, Math.min(44, 18 + dmg * 2 + kb * 1.2), col);
       // Debris shards scatter along the knockback line for heavier contacts.
       if (weight > 0.35) {
         const a = Math.atan2(vy, vx);
@@ -549,12 +1014,36 @@ export class Game {
           this.fx.add({ x: ix, y: iy, vx: Math.cos(sp) * (3 + Math.random() * 9), vy: Math.sin(sp) * (3 + Math.random() * 8) - 1, color: i % 2 ? col : '#ffffff', kind: 'shard', life: 16 + Math.random() * 10, size: 3 + Math.random() * 3, grav: .34 });
         }
       }
+      // ---- HEAVY-HIT SCREEN JUICE ------------------------------------------
+      // A double-pass bloom on the contact point, a chromatic shockwave on the
+      // really big blows, manga calligraphy, a speed-line burst along the
+      // knockback axis and a camera punch-in. None of this touches the sim.
+      this.fx.bloom(ix, iy, 16 + dmg * 1.6, col, 14, 2.4 + weight * 3);
+      if (!quiet && (dmg >= 11 || weight > 0.5)) {
+        this.fx.shock(ix, iy, Math.min(58, 28 + dmg * 2), col, 18);
+        this.speedBurst(Math.atan2(vy, vx), 0.6 + weight * 0.8);
+        this.punchIn(ix, iy, 0.08 + weight * 0.09);
+      }
       if (kb > 17) {
         this.flashScreen('#ffffff', 0.16 + weight * .18);
-        this.fx.text(ix, iy - 30, T.damage > 150 ? 'SMASH!' : 'CRACK!', col, 30, 36);
+        this.fx.word(ix, iy - 34, T.damage > 150 ? 'SMASH!' : 'CRASH!', col, 46, 30);
       }
+      // The single biggest contacts get their own word, so the biggest hit in
+      // the exchange is always the loudest thing on the panel.
+      if (weight >= 1 && dmg >= 18) this.fx.word(ix, iy - 112, 'BOOM!', col, 58, 38);
       // A readable number for anything that really hurt.
       if (dmg >= 9) this.fx.text(ix, iy - 14 - Math.random() * 8, `${Math.round(dmg)}`, col, 20 + Math.min(18, dmg), 34);
+
+      // ---- NEGATIVE FRAME -------------------------------------------------
+      // Two frames of high-contrast inversion on the three beats a shonen film
+      // reserves it for: a counter, a fatal blow, and anything the awakened kit
+      // landed. Followed by the chromatic shockwave already queued above.
+      const fatal = T.damage >= 140 && dmg >= 9;
+      if (setPieceHit || (counterHit && dmg >= 7) || fatal) {
+        this.negativeFrames(2);
+        this.fx.word(ix, iy - 60, setPieceHit ? 'GODLIKE!' : fatal ? 'ZASH!' : 'COUNTER!',
+          setPieceHit ? '#e2e8f0' : col, 52, 36);
+      }
     }
     sfx(dmg >= 11 ? 'heavyhit' : 'hit', kb / 12);
     if (h.fx === 'elec' && dmg > 5) sfx('elec');
@@ -568,6 +1057,13 @@ export class Game {
     const col = FX_COLORS[p.fx] || '#fff';
     this.fx.ring(p.x, p.y, 20, Math.max(p.w, p.h) * 0.8, col, 22, 12);
     this.fx.burst(p.x, p.y, 30, col, 10, 'ember', 30, 10);
+    // A finisher detonating is the loudest event a projectile can make: dual-pass
+    // bloom, a chromatic shockwave, the manga word and a camera punch.
+    this.fx.bloom(p.x, p.y, Math.max(p.w, p.h) * 0.7, col, 18, 5);
+    this.fx.shock(p.x, p.y, Math.max(p.w, p.h) * 0.5, col, 22);
+    this.fx.word(p.x, p.y - Math.max(p.w, p.h) * 0.4 - 30, 'BOOM!', col, 52, 34);
+    this.punchIn(p.x, p.y, 0.11);
+    this.speedBurst(p.dir > 0 ? 0 : Math.PI, 0.9);
     this.shake(12); sfx('heavyhit');
     for (const T of this.fighters) {
       if (!this.canDamage(p.owner, T) || !T.alive || T.invuln > 0) continue;
@@ -583,6 +1079,10 @@ export class Game {
     f.move = null; f.moveKey = null; f.moveConnected = false; f.hitMap.clear(); f.ctrl.clear(); f.recentMoves = []; f.hitstop = 0; f.hitstun = 0; f.tumble = 0; f.lastHitBy = null;
     f.sukunaFlash = 0; f.sukunaBlackFlash = false; f.sukunaLaunchTarget = null; f.sukunaGrabTarget = null; f.koCueFired = false; f.laughCueFired = false;
     f.standT = 0; f.standDur = 0; f.standAttackT = 0; f.standActive = false; f.frozen = false;
+    // Respawning is not a fresh awakening: a fighter who fell mid-state comes back
+    // sealed, with an empty bar and a clean set of cooldowns.
+    f.awakened = false; f.meter = 0; f.awakenLock = 0; f.juggleLeft = JUGGLE_BUDGET;
+    for (const key of Object.keys(f.cds)) f.cds[key] = 0;
     this.fx.ring(f.x, f.y - 40, 10, 70, f.color, 24, 6);
     this.fx.burst(f.x, f.y - 40, 20, f.color, 6, 'glow', 26, 5);
   }
@@ -592,6 +1092,14 @@ export class Game {
     // A stopped world cannot outlive the fighter holding it: release the queued
     // damage and let normal time resume.
     if (this.timeStop.active && this.timeStop.owner === f) this.endTimeStop();
+    // Falling in an Awakening costs the whole thing. The gauge was spent, the
+    // state is gone, and the bar goes to zero rather than keeping whatever was
+    // left of the drain - otherwise a knockout with nine points showing would
+    // hand the Awakening straight back on respawn and make dying in it free.
+    f.endAwaken();
+    f.awakenLock = 0;
+    f.juggleLeft = JUGGLE_BUDGET;
+    for (const key of AWAKEN_MOVES) f.cds[key] = 0;
     const hp = this.health.get(f); if (hp) hp.current = 0;
     const b = this.arena.blast;
     const px = Math.max(b.l + 40, Math.min(b.r - 40, f.x)), py = Math.max(b.t + 40, Math.min(b.b - 40, f.y));
@@ -623,10 +1131,52 @@ export class Game {
     const tx = Math.max(this.cam.x - 300, Math.min(this.cam.x + 300, px));
     const ty = Math.max(this.cam.y - 200, Math.min(this.cam.y + 150, py));
     this.fx.text(tx, ty, f.eliminated ? 'ELIMINATED!' : 'K.O.!', f.color, 54, 70);
+    // Raise the replay last, once the knockout is fully applied.
+    //
+    // Order matters: `arm` stashes the live world so it can be handed back
+    // exactly as the replay found it. Armed any earlier, it would capture the
+    // frame *before* the knockdown and restoring it would quietly stand the
+    // loser back up the instant the replay ended.
+    //
+    // It is deliberately left armed for a short beat, so the KO impact itself
+    // plays out at full speed before anything rewinds.
+    this.replay.arm(this, 26);
+    this.postReplayLock = 0;
   }
 
   // ---------- main step ----------
   step() {
+    // A KO replay owns the screen: the simulation is not stepped at all, and
+    // the renderer draws from the recorded ring buffer instead. Nothing here can
+    // touch damage, meter or the match clock, because nothing here runs the sim.
+    if (this.replay.active) {
+      this.replay.advance(this.frame);
+      if (this.replay.active) { this.replayTick++; this.replay.apply(this); }
+      else {
+        // The blow is on screen again, live and uninterrupted. Everything the
+        // replay swapped in is dropped so the resumed frame starts clean.
+        this.replay.release(this);
+        this.postReplayLock = REPLAY_AFTERMATH;
+        this.fx.clear();
+      }
+      return;
+    }
+    // The replay is over, but the knockdown still has to play out. Without this
+    // countdown the no-input window never closes, and because `ownsScreen`
+    // trusts it the match's own time scale is never restored either - a quiet,
+    // permanent slowdown that reads exactly like a freeze.
+    this.replay.tickAftermath(this.frame);
+    if (this.replay.armed && !this.opts.preview) {
+      if (this.replay.tickArm()) {
+        this.postReplayLock = 0; this.replayTick = 0;
+        // Paint the first recorded frame on the very frame the replay starts.
+        // Without this the opening frame is still the live knockout - so the
+        // "ELIMINATED!" banner flashes over the top of the rewind for one frame.
+        this.replay.apply(this);
+        return;
+      }
+      if (this.replay.active) return;
+    }
     // The time-stop budget is measured against the wall clock here rather than
     // against the simulation clock, so it lasts exactly five real seconds no
     // matter how the step loop is paced. The budget only drains once the caster
@@ -651,9 +1201,20 @@ export class Game {
     if (ts.resumeFx > 0) ts.resumeFx--;
     if (this.shakeAmt > 0) this.shakeAmt *= 0.86;
     if (this.flash.a > 0) this.flash.a = Math.max(0, this.flash.a - 0.03);
+    // Screen juice decays on its own clock so it can never leak into a later
+    // exchange: negative frames, speed lines and the camera punch-in.
+    if (this.negFrames > 0) this.negFrames--;
+    if (this.punch.t > 0) { this.punch.t--; if (this.punch.t === 0) this.punch.mag = 0; }
+    this.distortion.update();
+    for (const s of this.speedLines) s.life--;
+    if (this.speedLines.length && this.speedLines[0].life <= 0) this.speedLines.shift();
     if (!ts.active) this.updateAmbient();
     if (this.cin) {
       this.cin.t--;
+      // A cinematic stops the world; it does not stop the Awakening. The gauge is
+      // the clock the player is reading off the HUD, so it keeps falling while
+      // the camera is busy - otherwise a set-piece would silently hand back time.
+      for (const f of this.fighters) f.drainAwaken();
       this.updateCamera();
       if (this.cin.t <= 0) this.cin = null;
       return;
@@ -678,14 +1239,18 @@ export class Game {
     if (!this.opts.preview && !this.ended && this.countdown === 0 && !ts.active) this.elapsedFrames++;
 
     // inputs
+    // A knockout hands control back with a beat of silence: without it the
+    // player can eat a combo on the very frame the replay ends.
+    const locked = this.postReplayLock > 0;
+    if (locked) this.postReplayLock--;
     for (const f of this.fighters) {
       let inp: InputState = emptyInput();
       if (this.opts.preview) inp = this.previewInput(f);
-      else if (this.countdown > 0 || this.ended) inp = emptyInput();
+      else if (this.countdown > 0 || this.ended || locked) inp = emptyInput();
       else if (this.timeFrozen(f)) inp = emptyInput();
       else if (!f.isCPU) {
         const r = readPlayerInput(this.opts.bindings);
-        inp = { left: r.left, right: r.right, up: r.up, down: r.down, jump: r.jump || (this.opts.tapJump && r.up), light: r.light, heavy: r.heavy, dodge: r.dodge, special: r.special, awaken: r.awaken, limit: r.limit, ult: r.ult };
+        inp = { left: r.left, right: r.right, up: r.up, down: r.down, jump: r.jump || (this.opts.tapJump && r.up), light: r.light, heavy: r.heavy, dodge: r.dodge, special: r.special, awaken: r.awaken };
       } else if (this.cfg.rule === 'training') inp = this.dummyInput(f);
       else inp = this.ais.get(f)!.think(this);
       f.ctrl.feed(inp);
@@ -779,6 +1344,9 @@ export class Game {
       }
     }
     this.updateCamera();
+    // Record AFTER the step, so the slot holds the state the frame actually
+    // showed. A KO raised during the step is therefore in the final slot.
+    if (!this.opts.preview && !this.paused) this.replay.record(this);
   }
 
   endMatch() {
@@ -869,13 +1437,13 @@ export class Game {
     this.previewFrame = 0;
     this.previewFollowupFired = false;
     this.previewCounterPending = false;
+    this.previewAwakenSpent = false;
   }
 
   private previewMoveKey(action: PreviewAction, stance: PreviewStance): MoveKey {
     const bossAir = !!this.fighters[0]?.def.moves.aig;
-    if (action === 'limit') return stance === 'air' ? 'aex' : stance === 'down' ? 'dex' : stance === 'side' ? 'sex' : 'nex';
     if (action === 'awaken') return stance === 'air' ? 'aaw' : stance === 'down' ? 'daw' : stance === 'side' ? 'saw' : 'naw';
-    if (action === 'ult') return 'ult';
+    if (action === 'awakened') return stance === 'air' ? 'afu' : stance === 'down' ? 'dfu' : stance === 'side' ? 'sfu' : 'nfu';
     if (action === 'heavy') return stance === 'air' ? (bossAir ? 'aig' : 'rec') : stance === 'down' ? 'dsig' : stance === 'side' ? 'ssig' : 'nsig';
     if (action === 'special') {
       if (stance === 'air' && !!this.fighters[0]?.def.moves.aspec) return 'aspec' as MoveKey;
@@ -896,13 +1464,17 @@ export class Game {
     for (const fighter of [f, d]) {
       fighter.vx = fighter.vy = 0; fighter.move = null; fighter.moveKey = null; fighter.state = 'idle'; fighter.grounded = true;
       fighter.hitstun = 0; fighter.hitstop = 0; fighter.invuln = 0; fighter.tumble = 0; fighter.flashT = 0;
-      fighter.godT = 0; fighter.devilT = 0; fighter.auraT = 0; fighter.trail = []; fighter.cds = emptyCds();
+      fighter.godT = 0; fighter.devilT = 0; fighter.auraT = 0; fighter.trail = []; fighter.ghosts.length = 0; fighter.evadeT = 0; fighter.evadeCD = 0; fighter.cds = emptyCds();
       fighter.sukunaFlash = 0; fighter.sukunaBlackFlash = false; fighter.sukunaLaunchTarget = null; fighter.sukunaGrabTarget = null;
       fighter.facing = fighter === f ? 1 : -1;
     }
     f.x = -105; f.y = request.stance === 'air' ? -108 : 0;
     d.x = 125; d.y = request.stance === 'air' ? -32 : 0;
     d.damage = 40; d.meter = 100;
+    // The two Awakening showcases spend a gauge, so the gauge is full. The
+    // preview keeps it there, because a showcase that ends when the meter does
+    // is not showing the fifteen seconds it is meant to be showing.
+    if (request.action === 'awaken' || request.action === 'awakened') { f.meter = 100; this.infiniteMeter = true; }
     if (request.stance === 'air') { f.grounded = false; f.state = 'air'; f.vy = 0; d.grounded = false; d.state = 'air'; }
 
     const reach = move.hits.reduce((max: number, h: any) => Math.max(max, Math.abs(h.x) + h.w * 0.5), 0);
@@ -935,7 +1507,14 @@ export class Game {
       if (request.stance === 'down') i.down = true;
     };
     if (t === 2) {
-      i[request.action] = true;
+      // `awakened` is not a button: R opens the state and the real button follows below.
+      if (request.action === 'awakened') { i.awaken = true; this.previewAwakenSpent = true; }
+      else i[request.action] = true;
+      applyStance();
+    }
+    if (request.action === 'awakened' && t > 2 && this.previewAwakenSpent && f.awakened && f.moveKey === null) {
+      this.previewAwakenSpent = false;
+      i.special = true;
       applyStance();
     }
     if (t === 4 && this.previewCounterPending && this.fighters[1]?.alive) {
@@ -948,20 +1527,20 @@ export class Game {
       if (f.moveFrame >= window[0] && f.moveFrame < window[1] && (!ch.onHitOnly || f.moveConnected)) {
         if (request.action === 'awaken' && ch.special && !this.previewFollowupFired) {
           this.previewFollowupFired = true; i.special = true;
+        } else if (request.action === 'awakened' && ch.special && !this.previewFollowupFired) {
+          this.previewFollowupFired = true; i.special = true;
         } else if (request.action === 'heavy' && request.stance === 'neutral') {
           if (f.moveKey === 'nsig' && ch.heavy) i.heavy = true;
-          if (f.moveKey === 'boss_heavy2' && ch.limit) i.limit = true;
         }
       }
-    }
-    return i;
+    }    return i;
   }
 
   previewLabel() {
     const f = this.fighters[0];
     const action = this.previewRequest.action.toUpperCase();
     const stance = this.previewRequest.stance.toUpperCase();
-    if (f?.move?.name) return `${action}${f.move.ability === 'awakened' ? ' → K' : ''} · ${f.move.name} · ${stance}`;
+    if (f?.move?.name) return `${action} · ${f.move.name} · ${stance}`;
     const key = this.previewMoveKey(this.previewRequest.action, this.previewRequest.stance);
     return `${action} · ${f?.def.moves[key]?.name || key} · ${stance}`;
   }
@@ -969,10 +1548,12 @@ export class Game {
   // ---------- camera ----------
   updateCamera() {
     const bz = this.baseZoom();
-    if (this.opts.preview) { this.cam.x += (20 - this.cam.x) * 0.1; this.cam.z = Math.min(this.W / (this.previewRequest.action === 'ult' ? 760 : 430), (this.H - 115) / 235); this.cam.y = -25; return; }
+    if (this.opts.preview) { this.cam.x += (20 - this.cam.x) * 0.1; this.cam.z = Math.min(this.W / 430, (this.H - 115) / 235); this.cam.y = -25; this.applyPunch(); return; }
     if (this.cin) {
       const f = this.cin.f;
-      this.cam.x += (f.x - this.cam.x) * 0.15; this.cam.y += (f.y - 60 - this.cam.y) * 0.15; this.cam.z += (bz * 1.7 - this.cam.z) * 0.12;
+      this.cam.x += (f.x - this.cam.x) * 0.15; this.cam.y += (f.y - 60 - this.cam.y) * 0.15; this.cam.z += (bz * 1.28 - this.cam.z) * 0.12;
+      this.applyPunch();
+      this.settleCamera();
       return;
     }
     const b = this.arena.blast;
@@ -982,9 +1563,29 @@ export class Game {
     let minY = Math.min(...pts.map((p) => p[1])), maxY = Math.max(...pts.map((p) => p[1]));
     const w = Math.max(900, maxX - minX + 560), h = Math.max(520, maxY - minY + 420);
     let tz = Math.min(this.W / w, this.H / h);
-    tz = Math.max(bz * 0.45, Math.min(bz * 1.15, tz));
+    tz = Math.max(bz * MIN_ZOOM_K, Math.min(bz * 1.15, tz));
     const tx = (minX + maxX) / 2 * 0.85, ty = ((minY + maxY) / 2 - 40) * 0.85 + -150 * 0.15;
     this.cam.x += (tx - this.cam.x) * 0.08; this.cam.y += (ty - this.cam.y) * 0.08; this.cam.z += (tz - this.cam.z) * 0.05;
+    this.applyPunch();
+    this.settleCamera();
+  }
+
+  /**
+   * Camera punch-in. On top of the normal follow, a heavy impact briefly zooms
+   * 1.15x toward the point of contact. The offset is scaled by the punch
+   * lifetime, so the release is an exponential spring back rather than a cut —
+   * and because it is applied *after* the follow has been solved, the punch can
+   * never feed back into the framing the next frame computes.
+   */
+  private applyPunch() {
+    const p = this.punch;
+    if (p.t <= 0 || p.mag <= 0) return;
+    // Sharp attack, slow damped release: k^3 in, linear-out.
+    const k = p.t / 10;
+    const amt = p.mag * (k > 0.55 ? 1 : k * k * k * 2.4);
+    this.cam.z *= 1 + amt;
+    this.cam.x += (p.x - this.cam.x) * amt * 0.9;
+    this.cam.y += (p.y - 40 - this.cam.y) * amt * 0.9;
   }
 
   // ---------- ambient ----------
@@ -1017,13 +1618,15 @@ export class Game {
     ctx.translate(W / 2 + sx, H / 2 + sy); ctx.scale(this.cam.z, this.cam.z); ctx.translate(-this.cam.x, -this.cam.y);
     this.drawStage(ctx);
     const t = this.frame;
-    // contact shadows
+    // contact shadows — dynamic: they widen, soften and shear with elevation and
+    // with the direction of travel, so altitude is legible without a HUD.
     for (const f of this.fighters) {
       if (!f.alive) continue;
       const gy = this.groundBelow(f.x, f.y - 2);
       if (gy === null) continue;
       const drop = Math.max(0, gy - f.y);
-      drawShadow(ctx, f.x, gy + 1, (26 - Math.min(16, drop * 0.05)) * f.scale, Math.max(0.12, 0.75 - drop * 0.0022));
+      drawContactShadow(ctx, f.x, gy + 1, (26 - Math.min(16, drop * 0.05)) * f.scale,
+        Math.max(0.12, 0.75 - drop * 0.0022), f.vx, drop);
     }
     for (const p of this.projectiles) if (p.type === 'susanoo') p.draw(ctx, t);
     // Stage-scale entities (domains, shrines) sit behind the fighters so they
@@ -1041,13 +1644,83 @@ export class Game {
     // keeps its full colour while the arena itself loses all of it.
     if (ts.active) this.compositeTimeStop(ctx);
     if (ts.resumeFx > 0) this.compositeTimeStopResume(ctx);
+    this.drawSpeedLines(ctx);
+    this.compositeNegative(ctx);
 
     if (this.flash.a > 0) { ctx.globalAlpha = this.flash.a; ctx.fillStyle = this.flash.c; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+    // Radial lens ripple runs last of the world-space passes: it re-samples the
+    // finished frame, so anything drawn afterwards would be left unbent.
+    this.distortion.draw(ctx, this.canvas, W, H);
     if (this.opts.preview) return;
+    // A replay hides the interface: the point is to watch the exchange again,
+    // and a live damage readout on a frozen frame is a lie. The end banner goes
+    // with it — the match did not end at this point in the footage.
+    if (this.replay.active) { this.drawReplayOverlay(ctx); return; }
     this.drawOffscreen(ctx);
     this.drawHUD(ctx);
     if (this.cin) this.drawCinematic(ctx);
     this.drawBanners(ctx);
+  }
+
+  /**
+   * Replay chrome: letterbox, a REC indicator, the playback scrubber, and a
+   * rate readout that makes the slow motion legible as a choice rather than a
+   * stutter. Everything is in screen space and independent of the world camera,
+   * which is itself one of the recorded channels.
+   */
+  drawReplayOverlay(ctx: CanvasRenderingContext2D) {
+    const W = this.W, H = this.H, st = this.replay.status;
+    // Letterbox. Full height bars, eased in over the first 8 frames.
+    const bar = H * 0.085;
+    ctx.save();
+    ctx.fillStyle = '#05060a';
+    ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);
+    // 1px warm hairline so the bars read as a deliberate matte, not a crop.
+    ctx.fillStyle = 'rgba(255,255,255,0.09)';
+    ctx.fillRect(0, bar - 1, W, 1); ctx.fillRect(0, H - bar, W, 1);
+    // A faint red tally light in the top-left, like a broadcast monitor.
+    const pulse = 0.55 + Math.sin(this.replayTick * 0.18) * 0.45;
+    ctx.globalAlpha = pulse;
+    ctx.fillStyle = '#ff2a3c';
+    ctx.beginPath(); ctx.arc(28, bar / 2, 5, 0, 7); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.font = `italic 900 ${Math.round(bar * 0.44)}px Bangers, Impact, sans-serif`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('REPLAY', 42, bar / 2 + 1);
+    // Scrubber: the full five-second lead-in, with the knockout marked at the end.
+    const sw = Math.min(420, W * 0.42), sx = W - sw - 28, sy = bar / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillRect(sx, sy - 2, sw, 4);
+    const prog = Math.max(0, Math.min(1, st.progress));
+    ctx.fillStyle = st.onKill ? '#ff2a3c' : '#e2e8f0';
+    ctx.fillRect(sx, sy - 2, sw * prog, 4);
+    ctx.beginPath(); ctx.arc(sx + sw, sy, 5, 0, 7); ctx.fill();
+    // Rate readout: the whole point of the slow ramp has to be visible.
+    const rate = st.onKill ? 0.12 : st.slowing ? 0.12 + (st.toKill - 1) / 65 * 0.58 : 1;
+    ctx.textAlign = 'right';
+    ctx.font = `bold ${Math.round(bar * 0.34)}px Rajdhani, sans-serif`;
+    ctx.fillStyle = rate < 0.99 ? '#ffd24a' : 'rgba(255,255,255,0.5)';
+    ctx.fillText(`×${rate.toFixed(2)}`, W - 28, bar / 2 + 1);
+    ctx.restore();
+    // On the knockout frame itself, stamp the result over the letterbox.
+    if (st.onKill) {
+      const t = Math.min(1, (this.replayTick % 6) / 6);
+      ctx.save();
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate(-0.06);
+      ctx.scale(1 + (1 - t) * 0.5, 1 + (1 - t) * 0.5);
+      ctx.globalAlpha = 0.35 + t * 0.5;
+      ctx.font = `italic 900 ${Math.round(H * 0.2)}px Bangers, Impact, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 10; ctx.strokeStyle = '#000';
+      ctx.strokeText('K.O.', 0, 0);
+      const kg = ctx.createLinearGradient(0, -H * 0.1, 0, H * 0.1);
+      kg.addColorStop(0, '#fff'); kg.addColorStop(1, '#ff2a3c');
+      ctx.fillStyle = kg;
+      ctx.fillText('K.O.', 0, 0);
+      ctx.restore();
+    }
   }
 
   drawBackground(ctx: CanvasRenderingContext2D) {
@@ -1401,32 +2074,72 @@ export class Game {
         ctx.font = 'bold 16px Rajdhani, sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = '#fff';
         ctx.fillText(`${f.score >= 0 ? '+' : ''}${f.score}`, cw - 24, 26); ctx.textAlign = 'left';
       }
-      // L / U / H technique readiness
-      [
-        { label: 'L', keys: ['nspec', 'sspec', 'dspec'] as MoveKey[], color: f.def.color },
-        { label: 'U', keys: ['naw', 'saw', 'daw', 'aaw'] as MoveKey[], color: '#b067ff' },
-        { label: 'H', keys: ['nex', 'sex', 'dex', 'aex'] as MoveKey[], color: '#ffb52e' },
-      ].forEach((group, i) => {
+      /**
+       * Cooldown pips, one per button the player can press for a technique.
+       *
+       * The three attack pips swap to the awakened kit while the gauge is
+       * draining, so the readout a player glances at always describes the moves
+       * their buttons are actually pointing at.
+       */
+      const awakened = f.awakened;
+      const pips = awakened
+        ? [
+          { label: 'J', keys: ['nwl', 'swl', 'dwl', 'awl'] as MoveKey[], color: '#8dffb0' },
+          { label: 'K', keys: ['nwh', 'swh', 'dwh', 'awh'] as MoveKey[], color: '#ffb52e' },
+          { label: 'L', keys: ['nfu', 'sfu', 'dfu', 'afu'] as MoveKey[], color: '#b067ff' },
+        ]
+        : [
+          { label: 'L', keys: ['nspec', 'sspec', 'dspec'] as MoveKey[], color: f.def.color },
+          { label: 'R', keys: ['naw', 'saw', 'daw', 'aaw'] as MoveKey[], color: '#b067ff' },
+        ];
+      pips.forEach((group, i) => {
         const cd = Math.min(...group.keys.map((key) => f.cds[key] || 0));
-        const max = Math.max(...group.keys.map((key) => f.def.moves[key].cd || 1));
-        const px = cw - 66 + i * 20, py = 37;
+        const max = Math.max(...group.keys.map((key) => f.def.moves[key]?.cd || 1));
+        const px = cw - 46 - (pips.length - 1 - i) * 20, py = 37;
         ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(px, py, 16, 16);
-        const ready = cd <= 0, ratio = ready ? 1 : Math.max(0, 1 - cd / max);
+        const ready = awakened || cd <= 0, ratio = ready ? 1 : Math.max(0, 1 - cd / max);
         ctx.fillStyle = ready ? group.color : 'rgba(255,255,255,0.3)'; ctx.fillRect(px + 1, py + 16 * (1 - ratio) + 1, 14, 14 * ratio);
         ctx.font = 'black 9px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = ready ? '#071018' : '#777'; ctx.fillText(group.label, px + 8, py + 11);
         ctx.textAlign = 'left';
       });
-      // meter
+      /**
+       * AWAKENING GAUGE.
+       *
+       * One bar, and it means two different things depending on whether the state
+       * is open. Filling, it is a countdown to a decision. Draining, it is a
+       * countdown to the end of the fight you are currently in. The label says
+       * which, and the fill direction does too - a bar that quietly empties while
+       * a player is trying to read it is worse than no bar.
+       */
       const mw = cw - 106, mx = 88, my = 68;
+      const gauge = Math.max(0, Math.min(100, f.meter));
+      const full = gauge >= 100;
       ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(mx, my, mw, 8);
-      const full = f.meter >= 100;
-      const mg = ctx.createLinearGradient(mx, 0, mx + mw, 0); mg.addColorStop(0, f.def.color); mg.addColorStop(1, full ? '#ffffff' : f.def.color);
-      ctx.fillStyle = mg; ctx.fillRect(mx, my, mw * f.meter / 100, 8);
-      if (full) {
+      const mg = ctx.createLinearGradient(mx, 0, mx + mw, 0);
+      if (f.awakened) { mg.addColorStop(0, '#b067ff'); mg.addColorStop(1, '#ffffff'); }
+      else { mg.addColorStop(0, f.def.color); mg.addColorStop(1, full ? '#ffffff' : f.def.color); }
+      ctx.fillStyle = mg; ctx.fillRect(mx, my, mw * gauge / 100, 8);
+      if (f.awakened) {
+        // A draining bar: a travelling highlight and a hard edge at the current
+        // value, so the eye has something to read against.
+        const k = (this.frame % 24) / 24;
+        ctx.save(); ctx.beginPath(); ctx.rect(mx, my, mw * gauge / 100, 8); ctx.clip();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(mx + mw * k - 18, my, 36, 8);
+        ctx.restore();
+        ctx.fillStyle = '#fff'; ctx.fillRect(mx + mw * gauge / 100 - 2, my - 2, 3, 12);
+        ctx.font = 'bold 11px Rajdhani, sans-serif'; ctx.fillStyle = '#d7b8ff';
+        ctx.fillText(`AWAKENED · ${Math.ceil(gauge / 100 * (100 / GAUGE_DRAIN) / 60)}s`, mx, my + 20);
+      } else if (full) {
         ctx.globalAlpha = 0.5 + Math.sin(this.frame * 0.2) * 0.5;
-        ctx.font = 'bold 11px Rajdhani, sans-serif'; ctx.fillStyle = '#fff'; ctx.fillText('ULTIMATE READY', mx, my + 20);
+        ctx.font = 'bold 11px Rajdhani, sans-serif'; ctx.fillStyle = '#fff';
+        ctx.fillText(f.awakenLock > 0 ? 'AWAKENING' : `AWAKEN READY · ${keyLabel(this.opts.bindings.awaken[0])}`, mx, my + 20);
         ctx.globalAlpha = 1;
-      } else { ctx.font = '600 10px Rajdhani, sans-serif'; ctx.fillStyle = '#999'; ctx.fillText('ULT', mx, my + 19); }
+      } else {
+        // A slow bar has to be readable while it fills, or fifteen seconds of
+        // patience looks like nothing is happening.
+        ctx.font = '600 10px Rajdhani, sans-serif'; ctx.fillStyle = '#999';
+        ctx.fillText(`AWAKEN ${Math.floor(gauge)}%`, mx, my + 19);
+      }
       ctx.restore();
     }
     // timer
@@ -1442,14 +2155,19 @@ export class Game {
     const active = this.fighters[0];
     if (active?.state === 'attack' && active.move?.name) {
       const move = active.move;
-      const inferredAbility = move.ability || (active.moveKey === 'ult' ? 'ultimate' : active.moveKey && ['nspec', 'sspec', 'dspec'].includes(active.moveKey) ? 'special' : undefined);
-      const input = inferredAbility === 'limit' ? 'L LIMIT' : inferredAbility === 'awaken' ? 'U AWAKEN' : inferredAbility === 'awakened' ? 'U → K VARIANT' : inferredAbility === 'ultimate' ? 'R ULTIMATE' : inferredAbility === 'special' ? 'K SPECIAL' : 'MOVE';
+      const ability = move.ability || (active.moveKey && ['nspec', 'sspec', 'dspec', 'aspec'].includes(active.moveKey) ? 'special' : undefined);
+      const input = ability === 'awaken' ? 'R AWAKEN'
+        : ability === 'awakenLight' ? 'J AWAKENED'
+          : ability === 'awakenHeavy' ? 'K AWAKENED'
+            : ability === 'awakened' ? 'L AWAKENED'
+              : ability === 'special' ? 'L SPECIAL' : 'MOVE';
       const stance = move.stance ? ` · ${move.stance.toUpperCase()}` : '';
       const text = `${input} · ${move.name}${stance}`;
+      const accent = ability?.startsWith('awaken') ? '#b067ff' : active.def.color;
       ctx.save(); ctx.textAlign = 'center'; ctx.font = '900 14px Rajdhani, sans-serif';
       const width = Math.min(560, ctx.measureText(text).width + 34);
       ctx.fillStyle = 'rgba(5,5,12,0.82)'; ctx.fillRect(this.W / 2 - width / 2, 48, width, 25);
-      ctx.strokeStyle = move.ability === 'awakened' ? '#b067ff' : move.ability === 'limit' ? '#ffb52e' : active.def.color; ctx.lineWidth = 2; ctx.strokeRect(this.W / 2 - width / 2, 48, width, 25);
+      ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.strokeRect(this.W / 2 - width / 2, 48, width, 25);
       ctx.fillStyle = '#fff'; ctx.fillText(text, this.W / 2, 65); ctx.restore();
     }
     // training combo counter
@@ -1523,11 +2241,15 @@ export class Game {
     ctx.lineWidth = 8; ctx.strokeStyle = '#000'; ctx.fillStyle = '#fff';
     ctx.strokeText(c.name, 330, by + 62); ctx.fillText(c.name, 330, by + 62);
     ctx.font = 'bold 18px Rajdhani, sans-serif'; ctx.fillStyle = col; ctx.strokeText(c.f.def.name.toUpperCase(), 334, by + 90); ctx.fillText(c.f.def.name.toUpperCase(), 334, by + 90);
-    // Ultimate / awakening state chip so the player knows what just triggered.
+    // Awakening state chip, so the player knows exactly which of their three
+    // buttons is currently pointing somewhere else.
     const ability = c.f.move?.ability;
     if (ability) {
-      const label = ability === 'ultimate' ? 'ULTIMATE' : ability === 'awakened' ? 'AWAKENED' : ability === 'awaken' ? 'AWAKENING' : 'LIMIT BREAK';
-      const accent = ability === 'ultimate' ? '#ffd24a' : ability === 'limit' ? '#ffb52e' : '#b067ff';
+      const label = ability === 'awaken' ? 'AWAKENING'
+        : ability === 'awakenLight' ? 'AWAKENED · J'
+          : ability === 'awakenHeavy' ? 'AWAKENED · K'
+            : ability === 'awakened' ? 'AWAKENED · L' : 'SPECIAL';
+      const accent = ability === 'special' ? c.f.def.color : '#b067ff';
       ctx.font = 'black 15px Rajdhani, sans-serif';
       const w = ctx.measureText(label).width + 22;
       ctx.fillStyle = accent; ctx.fillRect(334, by + 100, w, 24);

@@ -2,7 +2,7 @@ import { AnimName } from './types';
 import { drawCostume, drawPresence } from './costumes';
 
 export type HairStyle = 'bowl' | 'spikeShort' | 'spikeLong' | 'flame' | 'mane' | 'messy' | 'bald' | 'ponytail' | 'swept' | 'twin'
-  | 'undercut' | 'wolf' | 'bob' | 'crest' | 'heart' | 'dio' | 'rose';
+  | 'undercut' | 'wolf' | 'bob' | 'crest' | 'heart' | 'dio' | 'rose' | 'ui';
 export type Weapon = 'dual' | 'katana' | 'gunbai' | 'greatsword' | 'claws' | 'triple' | 'chainsaw' | 'staff' | 'fists' | 'knife';
 export type Mark = 'none' | 'headband' | 'blindfold' | 'hat' | 'bandana' | 'scar' | 'mask' | 'visor' | 'heartCap';
 
@@ -345,8 +345,29 @@ const HAIR: Record<HairStyle, [number, number, number][]> = {
   dio: [[-176, 38, 12], [-150, 34, 14], [-122, 29, 15], [-92, 26, 15], [-60, 24, 15], [-26, 22, 14], [10, 19, 14], [46, 16, 13], [80, 12, 12], [110, 9, 10]],
   // Authentic Super Saiyan Rosé: large flared curved horns with dramatic upward silhouette
   rose: [[-178, 52, 18], [-152, 60, 20], [-122, 66, 22], [-88, 62, 20], [-52, 52, 18], [-14, 42, 16], [24, 34, 15], [62, 26, 14], [96, 18, 12]],
+  // Mastered Ultra Instinct, read as [angle, tip radius in head radii, lock
+  // half-width in degrees]. The anime form is a *dense platinum mass with points
+  // cut into its edge*, not a fan of long needles: the valleys all sit at 1.04r,
+  // hard against the skull, and the tips only reach 1.3-2.0r. A wider spread of
+  // tips reads as a sea urchin with the head in the middle of it; too few locks
+  // reads as a handful of slivers. Twelve is the number that closes the mass.
+  // The crown is heaviest between 100 and 160 degrees off the brow, so it rises
+  // behind the skull the way the form does, and the two rearmost locks are the
+  // short nape flicks.
+  ui: [[-166, 1.30, 15], [-145, 1.62, 16], [-121, 1.82, 16], [-95, 1.94, 17],
+  [-69, 1.90, 16], [-43, 1.74, 15], [-17, 1.56, 15], [9, 1.40, 14],
+  [33, 1.24, 13], [55, 1.12, 12], [74, 1.05, 11]],
 };
-/** Styles whose volume is drawn behind the skull rather than over the face. */
+/**
+ * Styles whose volume is drawn behind the skull rather than over the face.
+ *
+ * `ui` is deliberately NOT here. Every other entry is genuinely long - a mane, a
+ * ponytail, a bob - so it has to sit behind the head to leave the face clear. The
+ * Ultra Instinct crown is short, dense and capped over the skull, so drawing it
+ * behind means the head covers the entire mass and only the tips survive: a ring
+ * of spikes around a bald dome. It is drawn over instead, like every other short
+ * style, and the widow's peak in its own path is what keeps the face clear.
+ */
 const BACK_HAIR: HairStyle[] = ['mane', 'ponytail', 'twin', 'undercut', 'bob', 'heart', 'dio', 'rose'];
 
 function hair(ctx: CanvasRenderingContext2D, hx: number, hy: number, r: number, style: HairStyle, color: string, t: number, sway: number, scaleLen = 1, detailed = true) {
@@ -404,6 +425,119 @@ function hair(ctx: CanvasRenderingContext2D, hx: number, hy: number, r: number, 
     return;
   }
   const sp = HAIR[style];
+  if (style === 'ui') {
+    // ---- MASTERED ULTRA INSTINCT ---------------------------------------------
+    // Same polar construction as every other style: an angle, a lock length and
+    // a lock half-width, walked valley -> tip -> valley. A bespoke polygon was
+    // tried here first and it read as a flat paper shard, because one closed
+    // outline with five notches cut into it is a *shape*, not hair. What makes
+    // hair read at this size is repetition: many crisp tips of unequal length,
+    // each separated by background, over a solid mass at the skull.
+    //
+    // What is specific to the form is the proportion - the locks are far longer
+    // than any other style and swept up and *back*, heaviest between 100 and 160
+    // degrees off the brow, so the crown rises behind the skull instead of
+    // sitting on top of it. Nothing hangs; the whole read is a body that has
+    // stopped obeying gravity.
+    const breathe = Math.sin(t * .05) * 1.1 + sway * .05;
+    const locks = HAIR.ui;
+    const silhouette = (g = 0) => {
+      ctx.beginPath();
+      // Start behind the skull, low, so the mass closes over the back of the head.
+      ctx.moveTo(hx - r * 1.06 * (1 + g * .1), hy + r * .16 * (1 + g * .16));
+      for (let i = 0; i < locks.length; i++) {
+        const [deg, tipR, wid] = locks[i];
+        const a = deg * Math.PI / 180;
+        const w = wid * Math.PI / 180;
+        // Each lock breathes on its own phase; one shared phase reads as the
+        // whole head bobbing rather than as hair catching the light.
+        const ph = Math.sin(t * .07 + i * 1.7);
+        const valley = r * 1.04 * (1 + g * .1);
+        const reach = r * tipR * (detailed ? 1 : .88) * (1 + g * .12) * (1 + ph * .02);
+        const tipA = a + ph * .016;
+        ctx.lineTo(hx + Math.sin(a - w) * valley, hy - Math.cos(a - w) * valley);
+        ctx.lineTo(hx + Math.sin(tipA) * reach, hy - Math.cos(tipA) * reach + (reach > valley * 1.4 ? breathe * .04 : 0));
+        ctx.lineTo(hx + Math.sin(a + w) * valley, hy - Math.cos(a + w) * valley);
+      }
+      // Three-point widow's peak, at the same heights every other style uses.
+      // The hair is drawn *over* the face, so this edge is the only thing keeping
+      // the eye alive: the forward side has to stay above the brow, and the
+      // shape is allowed to drop only behind the far cheek. The generic spiky
+      // path's values are used verbatim because they were tuned against the eye.
+      ctx.lineTo(hx + r * .86, hy - r * .34);
+      ctx.lineTo(hx + r * .50, hy - r * .66);
+      ctx.lineTo(hx + r * .22, hy - r * .24);
+      ctx.lineTo(hx - r * .18, hy - r * .58);
+      ctx.lineTo(hx - r * .62, hy - r * .08);
+      ctx.lineTo(hx - r * .80, hy + r * .34);
+      ctx.closePath();
+    };
+
+    silhouette(0);
+    // Platinum body: white-hot at the crown cooling to blue at the tips. The
+    // gradient *is* the shading - a flat silver fill at this size is just grey.
+    const g = ctx.createLinearGradient(hx - r * 1.4, hy - r * 3.4, hx + r * 1.2, hy + r * .4);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(.22, '#f6faff');
+    g.addColorStop(.48, '#dde8f7');
+    g.addColorStop(.76, '#aac3e2');
+    g.addColorStop(1, '#7199cb');
+    ctx.fillStyle = g; ctx.fill();
+    // One heavy outline around the whole mass: this single line is what makes the
+    // hair read as a solid object rather than a cloud of light. It has to stay
+    // thin in absolute terms - a lock here is only ~5px across at the base, so a
+    // 3px stroke consumes the whole lock and the crown turns into a dark pinwheel.
+    // The generic styles use 1.6px for exactly this reason.
+    ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.strokeStyle = OL; ctx.stroke();
+
+    if (detailed) {
+      ctx.save(); ctx.clip();
+      // Interior seams: one groove per lock, raked along the flow. Kept light -
+      // twelve seams at full strength is a second outline on every lock.
+      ctx.strokeStyle = 'rgba(56,86,124,.34)'; ctx.lineWidth = 1.3; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < locks.length; i++) {
+        const [deg, tipR] = locks[i];
+        const a = (deg - 6) * Math.PI / 180, a2 = (deg + 6) * Math.PI / 180;
+        const e = r * tipR * .96, s = r * 1.02;
+        ctx.moveTo(hx + Math.sin(a) * s, hy - Math.cos(a) * s);
+        ctx.quadraticCurveTo(hx + Math.sin(a) * (s + (e - s) * .6), hy - Math.cos(a) * (s + (e - s) * .6), hx + Math.sin(a2) * e, hy - Math.cos(a2) * e);
+      }
+      ctx.stroke();
+      // Shadow shelf under the crown, so the mass has a top and a bottom.
+      ctx.fillStyle = 'rgba(52,82,122,.22)';
+      ctx.beginPath(); ctx.ellipse(hx, hy - r * .05, r * 1.5, r * .5, 0, 0, 7); ctx.fill();
+      // Specular band along the upper left: the metal read, in one stroke.
+      ctx.strokeStyle = 'rgba(255,255,255,.92)'; ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 1.0, hy - r * 1.2);
+      ctx.quadraticCurveTo(hx - r * .55, hy - r * 2.1, hx + r * .25, hy - r * 1.7);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // Corona: the same silhouette re-stroked additively, so the hair emits.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = .26; ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 5;
+    ctx.lineJoin = 'round';
+    silhouette(0); ctx.stroke();
+    ctx.globalAlpha = .18; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.4;
+    silhouette(0); ctx.stroke();
+    // Stardust shedding off the highest locks and drifting out of frame.
+    if (detailed) for (let i = 0; i < 6; i++) {
+      const lock = locks[1 + (i % 4)];
+      const a = lock[0] * Math.PI / 180, e = r * lock[1];
+      const ph = (t * .8 + i * 41) % 70 / 70;
+      ctx.globalAlpha = .45 * (1 - ph);
+      ctx.fillStyle = i % 2 ? '#ffffff' : '#93c5fd';
+      ctx.beginPath();
+      ctx.arc(hx + Math.sin(a) * e * (1 + ph * .18), hy - Math.cos(a) * e - ph * r * 1.2, 1 + (1 - ph) * 1.6, 0, 7);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
   ctx.beginPath(); ctx.moveTo(hx - r, hy + 1);
   if (style === 'bowl') {
     ctx.bezierCurveTo(hx - r * 1.4, hy - r * 1.65, hx + r * .65, hy - r * 1.65, hx + r, hy - r * .65);
@@ -445,21 +579,117 @@ function hair(ctx: CanvasRenderingContext2D, hx: number, hy: number, r: number, 
 /** Anime eye. `style` changes the aperture so each fighter reads at a glance. */
 function eye(ctx: CanvasRenderingContext2D, x: number, y: number, L: Look, lit = false) {
   const style = L.eyeStyle || 'sharp';
-  const w = style === 'narrow' ? 3.2 : style === 'round' ? 4.2 : style === 'glowing' ? 4.4 : 3.6;
-  const h = style === 'narrow' ? 1.7 : style === 'round' ? 3.3 : style === 'glowing' ? 3.0 : 2.4;
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = lit ? .85 : .3;
-  ctx.fillStyle = lit ? '#ff2040' : L.eye; ctx.beginPath(); ctx.ellipse(x, y, w + 1.4, h + 1.6, 0, 0, 7); ctx.fill();
+  // Ultra Instinct: a silver iris with concentric dark rings and a blown-out
+  // halo. The pupil is a void, so the eye never looks like it is focusing.
+  if (L.hairStyle === 'ui') {
+    const w = 4.5, h = 3.2;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const halo = ctx.createRadialGradient(x, y, .5, x, y, w * 3.4);
+    halo.addColorStop(0, 'rgba(255,255,255,.95)');
+    halo.addColorStop(.26, 'rgba(226,232,240,.7)');
+    halo.addColorStop(.6, 'rgba(147,197,253,.34)');
+    halo.addColorStop(1, 'rgba(147,197,253,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.ellipse(x, y, w * 3.4, h * 3.4, 0, 0, 7); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#f4f8ff'; ctx.strokeStyle = OL; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(x, y - .2, w, h, -.08, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#cbd5e1';
+    ctx.beginPath(); ctx.ellipse(x + .6, y, w * .72, h * .92, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath(); ctx.ellipse(x + .6, y, w * .5, h * .72, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath(); ctx.ellipse(x + 1, y + .1, w * .3, h * .62, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = OL; ctx.lineWidth = .8;
+    ctx.beginPath(); ctx.ellipse(x + 1, y + .1, w * .3, h * .62, 0, 0, 7); ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(x + 1.4, y - h * .5, w * .3, 0, 7); ctx.fill();
+    if (lit) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = .7;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.ellipse(x + .6, y, w * .34, h * .5, 0, 0, 7); ctx.fill();
+      ctx.restore();
+    }
+    // Low, flat Ultra Instinct brow.
+    ctx.strokeStyle = OL; ctx.lineWidth = 2.3;
+    ctx.beginPath(); ctx.moveTo(x - 4.2, y - 2.6); ctx.lineTo(x + 4.4, y - 2.1); ctx.stroke();
+    return;
+  }
+  // ---- default anime eye -------------------------------------------------
+  // The aperture is ALMOND, not round, and the iris fills most of it. A white
+  // disc with a dot in the middle is the single thing that makes a face read as
+  // a cartoon rather than as anime, so the lash line is the dominant feature
+  // and the sclera is only a sliver above and below the iris.
+  const w = style === 'narrow' ? 3.4 : style === 'round' ? 4.0 : style === 'glowing' ? 4.2 : 3.8;
+  const h = style === 'narrow' ? 1.5 : style === 'round' ? 2.8 : style === 'glowing' ? 2.5 : 2.2;
+  const tilt = style === 'round' ? .18 : .34;          // outer corner rides high
+  const inner: [number, number] = [x - w, y + h * .18];
+  const peak: [number, number] = [x - w * .16, y - h * 1.02];
+  const outer: [number, number] = [x + w, y - h * tilt];
+  const lower: [number, number] = [x - w * .34, y + h * .74];
+  const aperture = () => {
+    ctx.beginPath();
+    ctx.moveTo(inner[0], inner[1]);
+    ctx.quadraticCurveTo(peak[0], peak[1] - h * .18, peak[0] + w * .1, peak[1]);
+    ctx.quadraticCurveTo(outer[0] - w * .4, outer[1] - h * .22, outer[0], outer[1]);
+    ctx.quadraticCurveTo(lower[0] + w * .3, lower[1] + h * .3, lower[0], lower[1]);
+    ctx.quadraticCurveTo(inner[0] + w * .3, inner[1] - h * .16, inner[0], inner[1]);
+    ctx.closePath();
+  };
+  // Powered eyes bleed their colour into the air around them.
+  if (lit) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = .5; ctx.fillStyle = L.eye;
+    ctx.beginPath(); ctx.ellipse(x, y - h * .2, w * 2.1, h * 1.9, 0, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+  ctx.save();
+  aperture();
+  ctx.fillStyle = '#eef2fb'; ctx.fill();
+  ctx.clip();
+  // Iris, filling the aperture, with the classic dark band under the upper lid.
+  const ig = ctx.createLinearGradient(0, y - h * 1.1, 0, y + h);
+  ig.addColorStop(0, shade(L.eye, .52));
+  ig.addColorStop(.45, L.eye);
+  ig.addColorStop(1, tint(L.eye, 1.25));
+  ctx.fillStyle = ig;
+  ctx.beginPath(); ctx.ellipse(x + w * .06, y - h * .06, w * .74, h * 1.02, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(10,14,24,.34)';
+  ctx.beginPath(); ctx.ellipse(x + w * .06, y - h * .92, w * .8, h * .5, 0, 0, 7); ctx.fill();
+  // Pupil + the two specular hits that make an eye look wet.
+  ctx.fillStyle = '#141a26';
+  ctx.beginPath(); ctx.ellipse(x + w * .04, y - h * .04, w * .3, h * .56, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.ellipse(x + w * .3, y - h * .48, w * .26, h * .3, .3, 0, 7); ctx.fill();
+  ctx.globalAlpha = .7;
+  ctx.beginPath(); ctx.ellipse(x - w * .26, y + h * .38, w * .15, h * .16, 0, 0, 7); ctx.fill();
   ctx.restore();
-  ctx.fillStyle = '#f8f8ff'; ctx.strokeStyle = OL; ctx.lineWidth = 1.1;
-  ctx.beginPath(); ctx.ellipse(x, y - .2, w, h, -.08, 0, 7); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = L.eye; ctx.beginPath(); ctx.ellipse(x + .5, y, w * .46, h * .8, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(x + 1, y + .2, w * .22, h * .76, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + 1.2, y - h * .55, w * .3, 0, 7); ctx.fill();
-  // Brow: heavier, lower and straighter for hostile characters.
-  const bw = style === 'narrow' ? 6.2 : 7.4, tilt = style === 'round' ? 1.6 : 3.4;
-  ctx.strokeStyle = OL; ctx.lineWidth = 2.1;
-  ctx.beginPath(); ctx.moveTo(x - bw * .55, y - 2.9 - tilt * .35); ctx.lineTo(x + bw * .55, y - 2.2 - tilt * .55); ctx.stroke();
+  // The lash line: thick at the outer corner, tapering into the inner one.
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = OL;
+  ctx.lineWidth = 1.7;
+  ctx.beginPath();
+  ctx.moveTo(inner[0], inner[1]);
+  ctx.quadraticCurveTo(peak[0], peak[1] - h * .2, peak[0] + w * .1, peak[1]);
+  ctx.quadraticCurveTo(outer[0] - w * .4, outer[1] - h * .2, outer[0], outer[1]);
+  ctx.stroke();
+  // A flick off the outer corner — the detail that sells the eye as anime.
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(outer[0] - .3, outer[1] + .1);
+  ctx.quadraticCurveTo(outer[0] + w * .3, outer[1] - h * .3, outer[0] + w * .42, outer[1] - h * .58);
+  ctx.stroke();
+  // Lower lid, light and thin.
+  ctx.strokeStyle = 'rgba(60,44,40,.5)'; ctx.lineWidth = .9;
+  ctx.beginPath();
+  ctx.moveTo(lower[0], lower[1]);
+  ctx.quadraticCurveTo(lower[0] + w * .34, lower[1] + h * .3, x - w * .92, y + h * .1);
+  ctx.stroke();
+  // Brow: thin and angled, sitting clear of the lid.
+  ctx.strokeStyle = shade(L.hair, .72); ctx.lineWidth = 1.9;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 1.02, y - h * 1.9 - tilt * 1.2);
+  ctx.quadraticCurveTo(x + w * .1, y - h * 2.5 - tilt * 1.4, x + w * 1.05, y - h * 1.75 - tilt);
+  ctx.stroke();
 }
 
 function drawBackDetails(ctx: CanvasRenderingContext2D, f: any, sh: [number, number], hipY: number, time: number) {
@@ -726,7 +956,42 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   const devil = f.devilT > 0, god = f.godT > 0;
   const techniqueActive = f.state === 'attack' && !!f.move?.ability && f.move.ability !== 'special';
   const identity = f.def?.styleId || f.def?.id || '';
-  drawPresence(ctx, identity, L, time, devil || god, f.state === 'attack');
+  /**
+   * ULTRA INSTINCT FORM.
+   * `uiForm` fighters repaint themselves in the silver crown the moment their
+   * transformation state opens, so an existing roster member (base Goku) taps
+   * into the God-Tier look without a second character definition. Only the
+   * rendering changes here; the numbers come from the shared `godT` multipliers.
+   */
+  const uiForm = god && f.def?.uiForm === true;
+  const uiSilver = uiForm || L.hairStyle === 'ui';
+  // The derived look is cached on the fighter and keyed by its source: a
+  // transformation can run for 600 frames, and rebuilding an identical object
+  // 600 times is exactly the steady per-frame garbage this avoids.
+  let bodyLook = L;
+  if (uiForm) {
+    if (!f.uiLook || f.uiLook.src !== L) {
+      f.uiLook = {
+        src: L,
+        look: { ...L, hair: '#f8fafc', hair2: '#93c5fd', hairStyle: 'ui', eye: '#e2e8f0', energy: '#f8fafc', energy2: '#60a5fa' },
+      };
+    }
+    bodyLook = f.uiLook.look;
+  }
+  drawPresence(ctx, identity, bodyLook, time, devil || god, f.state === 'attack');
+
+  // ---- COSMIC ULTRA INSTINCT AURA -----------------------------------------
+  // A silver-haired fighter never fully powers down, and everything that raises
+  // his output (transformation, technique, instant slip) flares the shell.
+  if (uiSilver) {
+    let k = uiForm ? 0.9 : 0.5;
+    if (god) k += 0.5;
+    if (f.evadeT > 0) k += 0.45;
+    if (f.auraT > 0) k += Math.min(0.3, f.auraT / 34);
+    if (techniqueActive) k += 0.22;
+    if (f.awakened) k += 0.5;
+    drawCosmicAura(ctx, f, bodyLook, hy, time, k);
+  }
 
   // ---- contact shadow: tight ellipses under each foot, drawn in body space so
   // it tracks the pose instead of behaving like a decal. This is what pins the
@@ -766,18 +1031,26 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   drawBackDetails(ctx, f, sh, hy, time);
 
   // ---- rim / back light silhouette ----
+  // A back light has to HUG the body. A 10px stroke around the head is not a rim,
+  // it is a halo: on a dark background every fighter ends up wearing a flat
+  // glowing disc. Thin on the head, thin on the limbs, and only really present
+  // when there is an aura to justify it.
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.globalAlpha = devil || god ? 0.5 : techniqueActive ? 0.42 : 0.24;
+  const rimA = devil || god ? 0.5 : techniqueActive ? 0.4 : f.auraT > 0 ? 0.3 : 0.16;
+  ctx.globalAlpha = rimA;
   ctx.strokeStyle = devil ? '#ff2a4a' : god ? '#9fe6ff' : L.energy;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.lineWidth = 10;
+  ctx.lineWidth = 4.5;
   ctx.beginPath();
   ctx.moveTo(footB[0], footB[1]); ctx.lineTo(kneeB[0], kneeB[1]); ctx.lineTo(hx, hy); ctx.lineTo(neck[0], neck[1]);
   ctx.moveTo(hx, hy); ctx.lineTo(kneeF[0], kneeF[1]); ctx.lineTo(footF[0], footF[1]);
   ctx.moveTo(sh[0], sh[1]); ctx.lineTo(elF[0], elF[1]); ctx.lineTo(haF[0], haF[1]);
   ctx.stroke();
-  ctx.beginPath(); ctx.arc(head[0], head[1], 13, 0, 7); ctx.stroke();
+  // The head ring tracks the real skull radius instead of a hard-coded 13, and
+  // sits just outside the silhouette so it reads as an edge, not a shell.
+  ctx.lineWidth = 3.2;
+  ctx.beginPath(); ctx.arc(head[0], head[1], 12.2 * B.head + 1.2, 0, 7); ctx.stroke();
   ctx.restore();
 
   // ---- devil wing ----
@@ -822,8 +1095,11 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
     }
   }
 
+  // `sleeve: 'none'` is a shirtless fighter: the upper arm is bare skin, not an
+  // unpainted fill that would silently inherit the previous stroke colour.
+  const sleeveC = L.sleeve === 'none' ? L.skin : L.sleeve;
   // back arm + back weapon
-  limb(ctx, [sh, elB, haB], limbW, shade(L.sleeve), shade(L.fore));
+  limb(ctx, [sh, elB, haB], limbW, shade(sleeveC), shade(L.fore));
   if (L.weapon === 'dual' || L.weapon === 'triple') drawWeapon(ctx, 'dual', haB, pose.aB[1] + 0.35, f, time, true);
   limb(ctx, [[hx - 2, hy], kneeB, footB], legW, shade(L.pants), shade(L.boots));
 
@@ -842,8 +1118,13 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
     ctx.closePath();
   };
   torsoPath(); ctx.strokeStyle = OL; ctx.lineWidth = 5; ctx.stroke();
+  // `top: 'none'` is a bare torso. `sleeve: 'none'` is a *torn* gi: the sleeves
+  // are gone but the chest panel survives, so the muscle cut still has to read.
+  const shirtless = L.top === 'none';
+  const tornGi = shirtless || L.sleeve === 'none';
+  const topCol = shirtless ? L.skin : L.top;
   const tg = ctx.createLinearGradient(hx - 9, hy, hx + 10, neck[1]);
-  tg.addColorStop(0, shade(L.top, 0.68)); tg.addColorStop(0.48, L.top); tg.addColorStop(1, tint(L.top, 1.22));
+  tg.addColorStop(0, shade(topCol, 0.68)); tg.addColorStop(0.48, topCol); tg.addColorStop(1, tint(topCol, 1.22));
   torsoPath(); ctx.fillStyle = tg; ctx.fill();
   ctx.save(); torsoPath(); ctx.clip();
   ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(hx - 6, hy - 2); ctx.quadraticCurveTo(hx - 1, (hy + neck[1]) / 2, sh[0] + 3, neck[1] + 2); ctx.stroke();
@@ -855,14 +1136,85 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
     ctx.moveTo(hx - girth * .8, sh[1] - 6); ctx.quadraticCurveTo(hx, sh[1] - 3, hx + girth * .8, sh[1] - 6);
     ctx.stroke();
   }
-  ctx.fillStyle = shade(L.top, .55); ctx.beginPath(); ctx.moveTo(hx - 8, hy - 3); ctx.lineTo(hx + 7, hy - 3); ctx.lineTo(hx + 5, hy + 10); ctx.lineTo(hx - 6, hy + 9); ctx.closePath(); ctx.fill();
+  /**
+   * CHEST CUT — the six-pack + sternum definition a bare torso needs so the
+   * musculature reads at 60px tall. Drawn in torso-local space so it tracks the
+   * lean, and scaled by the chest build so a bruiser and a brawler differ.
+   */
+  if (tornGi) {
+    const cy0 = hy + 3, span = 7.6 * B.chest;
+    // Warm bounce under the pectorals, cool rim from the aura on top.
+    const bandH = Math.max(2, (cy0 - sh[1]) * .5 + 5);
+    const cg2 = ctx.createLinearGradient(hx, sh[1] + 2, hx, hy + 4);
+    cg2.addColorStop(0, 'rgba(255,255,255,.14)');
+    cg2.addColorStop(.55, 'rgba(255,255,255,0)');
+    cg2.addColorStop(1, 'rgba(40,20,10,.26)');
+    ctx.fillStyle = cg2;
+    ctx.beginPath(); ctx.ellipse(hx, cy0 + 2, span * 1.15, bandH, 0, 0, 7); ctx.fill();
+    // Sternum + the collar of the ribcage.
+    ctx.strokeStyle = 'rgba(0,0,0,.34)'; ctx.lineWidth = 1.7;
+    ctx.beginPath();
+    ctx.moveTo(hx + .5, sh[1] + 1);
+    ctx.quadraticCurveTo(hx, sh[1] + (hy - sh[1]) * .42, hx + .5, cy0 + 2);
+    ctx.stroke();
+    // Pectoral shelf: one bold curve per side, the anime shorthand for a pec.
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(hx + .5, sh[1] + 3);
+    ctx.quadraticCurveTo(hx - span * .78, sh[1] + 4.4, hx - span * 1.02, cy0 - 1);
+    ctx.moveTo(hx + .5, sh[1] + 3);
+    ctx.quadraticCurveTo(hx + span * .78, sh[1] + 4.4, hx + span * 1.02, cy0 - 1);
+    ctx.stroke();
+    // Abdominal wall: three tapering pairs running down to the belt.
+    ctx.strokeStyle = 'rgba(0,0,0,.28)'; ctx.lineWidth = 1.5;
+    const rows = 3, top = cy0 + 3.5, gap = (hy - top) / (rows + .4);
+    for (let i = 0; i < rows; i++) {
+      const y = top + gap * (i + .55), k = 1 - i * .16, hw = span * .56 * k;
+      ctx.beginPath();
+      ctx.moveTo(hx - hw, y - 1.4);
+      ctx.quadraticCurveTo(hx - hw * .38, y + 1.6, hx - .6, y);
+      ctx.moveTo(hx + hw, y - 1.4);
+      ctx.quadraticCurveTo(hx + hw * .38, y + 1.6, hx + .6, y);
+      ctx.stroke();
+    }
+    // Oblique slash on each flank ties the ribs to the hips.
+    ctx.strokeStyle = 'rgba(0,0,0,.24)'; ctx.lineWidth = 1.6;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(hx + side * span * 1.02, cy0 + 1);
+      ctx.quadraticCurveTo(hx + side * span * .95, hy - 3, hx + side * span * .5, hy - 1.5);
+      ctx.stroke();
+    }
+    // Specular slash across the collarbones.
+    ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(hx - span * .95, sh[1] + 4.6); ctx.quadraticCurveTo(hx, sh[1] + 2.4, hx + span * .95, sh[1] + 4.6);
+    ctx.stroke();
+  }
+  if (!shirtless) {
+    ctx.fillStyle = shade(L.top, .55); ctx.beginPath(); ctx.moveTo(hx - 8, hy - 3); ctx.lineTo(hx + 7, hy - 3); ctx.lineTo(hx + 5, hy + 10); ctx.lineTo(hx - 6, hy + 9); ctx.closePath(); ctx.fill();
+  }
   ctx.restore();
   // neck and collar
   ctx.strokeStyle = OL; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(neck[0], neck[1] + 1); ctx.lineTo(head[0], head[1] + 8); ctx.stroke();
   ctx.strokeStyle = shade(L.skin, .92); ctx.lineWidth = 5; ctx.stroke();
-  ctx.strokeStyle = L.top2; ctx.lineWidth = 3.2;
-  ctx.beginPath(); ctx.moveTo(sh[0] - 7, sh[1] + 1); ctx.quadraticCurveTo(neck[0] - 1, neck[1] + 7, sh[0] + 8, sh[1]); ctx.stroke();
-  ctx.fillStyle = L.top2; ctx.beginPath(); ctx.arc(sh[0] + 4, sh[1] + 7, 2.2, 0, 7); ctx.fill();
+  if (tornGi) {
+    // Ripped hem: a jagged trim where the gi gave way, plus the trap shadow that
+    // a sleeveless cut always needs to keep the neck from floating.
+    ctx.strokeStyle = 'rgba(0,0,0,.3)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(sh[0] - 8, sh[1] + 1.5); ctx.lineTo(sh[0] - 4, sh[1] + 5.5); ctx.lineTo(sh[0] - 1, sh[1] + 1.5);
+    ctx.moveTo(sh[0] + 2, sh[1] + 1.5); ctx.lineTo(sh[0] + 5.5, sh[1] + 5.5); ctx.lineTo(sh[0] + 9, sh[1] + 1.5);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,.22)'; ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.moveTo(neck[0] - 6, neck[1] + 5); ctx.quadraticCurveTo(neck[0], neck[1] + 10, neck[0] + 6, neck[1] + 5);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = L.top2; ctx.lineWidth = 3.2;
+    ctx.beginPath(); ctx.moveTo(sh[0] - 7, sh[1] + 1); ctx.quadraticCurveTo(neck[0] - 1, neck[1] + 7, sh[0] + 8, sh[1]); ctx.stroke();
+    ctx.fillStyle = L.top2; ctx.beginPath(); ctx.arc(sh[0] + 4, sh[1] + 7, 2.2, 0, 7); ctx.fill();
+  }
 
   // front leg
   limb(ctx, [[hx, hy], kneeF, footF], legW, L.pants, L.boots);
@@ -871,8 +1223,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   // ---- head ----
   const hr = 12.2 * B.head;
   const sway = Math.max(-25, Math.min(25, -fwdSpeed * 3 + f.vy * 1.5));
-  const longHair = BACK_HAIR.includes(L.hairStyle);
-  if (longHair) hair(ctx, head[0], head[1], hr, L.hairStyle, L.hair, time, sway, 1, !!L.eyeStyle);
+  const longHair = BACK_HAIR.includes(bodyLook.hairStyle);
+  if (longHair) hair(ctx, head[0], head[1], hr, bodyLook.hairStyle, bodyLook.hair, time, sway, 1, !!bodyLook.eyeStyle);
   const fg = ctx.createRadialGradient(head[0] + 3, head[1] - 4, 1, head[0], head[1], hr + 2);
   fg.addColorStop(0, tint(L.skin, 1.08)); fg.addColorStop(1, shade(L.skin, 0.88));
   ctx.fillStyle = fg; ctx.strokeStyle = OL; ctx.lineWidth = 2.5;
@@ -898,7 +1250,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55;
     ctx.fillStyle = L.eye; ctx.fillRect(head[0] - 7, head[1] - 3, 15, 2); ctx.restore();
   } else if (L.eyeStyle) {
-    eye(ctx, head[0] + 6, head[1], L, god || devil);
+    eye(ctx, head[0] + 6, head[1], bodyLook, god || devil);
   } else {
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = god || devil ? 0.8 : 0.28;
     ctx.fillStyle = devil ? '#ff2040' : L.eye; ctx.beginPath(); ctx.ellipse(head[0] + 6, head[1], 5, 4.5, 0, 0, 7); ctx.fill(); ctx.restore();
@@ -909,10 +1261,14 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
     ctx.strokeStyle = OL; ctx.lineWidth = 2.1; ctx.beginPath(); ctx.moveTo(head[0] + 2.2, head[1] - 5.7); ctx.lineTo(head[0] + 9.6, head[1] - 4.2); ctx.stroke();
   }
   if (!longHair) {
-    if (L.hair2) hair(ctx, head[0], head[1], hr, L.hairStyle, L.hair2, time, sway, 1, !!L.eyeStyle);
-    hair(ctx, head[0], head[1], hr, L.hairStyle, L.hair, time, sway, L.hair2 ? 0.6 : 1, !!L.eyeStyle);
+    // The Ultra Instinct crown is a single cap drawn *over* the skull. Drawing it
+    // behind - as the genuinely long styles are - leaves the head covering the
+    // mass, so all that survives is a ring of tips and he wears a sea urchin.
+    const uiCrown = bodyLook.hairStyle === 'ui';
+    if (bodyLook.hair2 && !uiCrown) hair(ctx, head[0], head[1], hr, bodyLook.hairStyle, bodyLook.hair2, time, sway, 1, !!bodyLook.eyeStyle);
+    hair(ctx, head[0], head[1], hr, bodyLook.hairStyle, bodyLook.hair, time, sway, bodyLook.hair2 && !uiCrown ? 0.6 : 1, !!bodyLook.eyeStyle);
   } else {
-    ctx.fillStyle = shade(L.hair, 0.9);
+    ctx.fillStyle = shade(bodyLook.hair, 0.9);
     ctx.beginPath(); ctx.moveTo(head[0] + 2, head[1] - 11); ctx.lineTo(head[0] + 14, head[1] + 5); ctx.lineTo(head[0] + 6, head[1] - 4); ctx.closePath(); ctx.fill();
   }
   // Mouth: opens on exertion so attacks and pain read without changing the model.
@@ -997,7 +1353,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   drawCostume(ctx, identity, L, head, sh, hy, time, devil || god);
 
   // front arm + weapon
-  limb(ctx, [sh, elF, haF], 7.2, L.sleeve, L.fore);
+  limb(ctx, [sh, elF, haF], 7.2, sleeveC, L.fore);
   ctx.fillStyle = L.skin; ctx.strokeStyle = OL; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.ellipse(haF[0], haF[1], 4.1, 3.7, 0, 0, 7); ctx.fill(); ctx.stroke();
   const tip = drawWeapon(ctx, L.weapon, haF, pose.wep, f, time, false);
@@ -1020,7 +1376,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
   ctx.globalAlpha = .3;
-  ctx.strokeStyle = devil ? '#ff5a70' : god ? '#9fe6ff' : tint(L.energy, 1.15);
+  ctx.strokeStyle = devil ? '#ff5a70' : uiForm ? '#ffffff' : god ? '#9fe6ff' : tint(L.energy, 1.15);
   ctx.lineWidth = 1.6; ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(head[0] + 7, head[1] - 2);
@@ -1053,6 +1409,239 @@ export function drawShadow(ctx: CanvasRenderingContext2D, x: number, groundY: nu
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.ellipse(x, groundY, w, w * 0.3, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
+}
+
+/**
+ * DYNAMIC DIRECTIONAL CONTACT SHADOW
+ *
+ * A fighter's shadow is the cheapest possible cue for how high off the floor he
+ * is. It is drawn as a stack of widening, softening, *skewed* ellipses: the
+ * nearer the camera, the wider and the more the ellipse is sheared along the
+ * direction of travel, and the further from the floor the softer and fainter it
+ * gets. Two bands stand in for a real penumbra, so a fighter at apex reads as
+ * genuinely airborne instead of sliding on an invisible plane.
+ */
+export function drawContactShadow(ctx: CanvasRenderingContext2D, x: number, groundY: number, w: number, alpha: number, skew = 0, lift = 0) {
+  if (alpha <= 0.005 || w <= 0.5) return;
+  ctx.save();
+  const rx = w;
+  const ry = Math.max(0.6, w * (0.3 + Math.min(0.14, lift * 0.0006)));
+  // Ambient occlusion core: darkest, tightest, directly under the fighter.
+  ctx.globalAlpha = alpha;
+  const core = ctx.createRadialGradient(x, groundY, 1, x, groundY, rx);
+  core.addColorStop(0, 'rgba(0,0,0,0.62)');
+  core.addColorStop(0.45, 'rgba(0,0,0,0.3)');
+  core.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = core;
+  ctx.beginPath(); ctx.ellipse(x, groundY, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  // Penumbra: a wider, much softer band that sells the soft edge.
+  const px = rx * (1.55 + Math.min(0.7, lift * 0.0008));
+  const shear = Math.max(-0.45, Math.min(0.45, skew * 0.05));
+  ctx.globalAlpha = alpha * 0.4;
+  const soft = ctx.createRadialGradient(x, groundY, 1, x, groundY, px);
+  soft.addColorStop(0, 'rgba(0,0,0,0.34)');
+  soft.addColorStop(0.5, 'rgba(0,0,0,0.12)');
+  soft.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = soft;
+  ctx.beginPath(); ctx.ellipse(x, groundY, px, px * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  if (Math.abs(shear) > 0.02) {
+    // A second contact lobe trailing the direction of travel: the shadow
+    // stretches away from the light when the fighter is moving hard.
+    ctx.globalAlpha = alpha * 0.3;
+    ctx.beginPath();
+    ctx.ellipse(x - skew * 0.32, groundY - ry * 0.1, rx * 1.18, ry * 0.8, shear, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** A single decaying after-image: the fighter's mass, tinted in his energy. */
+export interface Ghost { x: number; y: number; facing: number; scale: number; life: number; max: number; color: string; }
+
+/**
+ * MOTION AFTER-IMAGES (ghosting)
+ *
+ * Anime speed is sold by persistence, not realism. Each ghost is a silhouette —
+ * a cheap capsule-plus-skull mass, never a second full fighter render — so five
+ * of them cost almost nothing and still read as a body tearing through space.
+ * Drawn additively so overlapping ghosts bloom into a streak.
+ */
+export function drawGhosts(ctx: CanvasRenderingContext2D, ghosts: Ghost[]) {
+  if (ghosts.length < 1) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < ghosts.length; i++) {
+    const g = ghosts[i];
+    const t = Math.max(0, Math.min(1, g.life / g.max));
+    const k = (i + 1) / ghosts.length;               // older ghosts dim further
+    const a = t * t * 0.42 * (0.35 + k * 0.65);
+    if (a <= 0.01) continue;
+    const s = g.scale;
+    ctx.save();
+    ctx.translate(g.x, g.y);
+    ctx.scale(g.facing * s * (0.9 + k * 0.12), s);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = g.color;
+    // Torso: a tapered mass from the hip to the shoulders.
+    ctx.beginPath();
+    ctx.moveTo(-7, 2);
+    ctx.quadraticCurveTo(-11, -26, -6.5, -40);
+    ctx.quadraticCurveTo(0, -48, 7.5, -40);
+    ctx.quadraticCurveTo(12, -25, 8, 2);
+    ctx.closePath();
+    ctx.fill();
+    // Skull + the spike silhouette, so the ghost is still recognisably *him*.
+    ctx.beginPath(); ctx.arc(0.5, -50, 10.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-9, -54); ctx.lineTo(-16, -68); ctx.lineTo(-3, -58);
+    ctx.moveTo(-1, -57); ctx.lineTo(2, -75); ctx.lineTo(6, -57);
+    ctx.moveTo(6, -56); ctx.lineTo(16, -70); ctx.lineTo(10, -52);
+    ctx.closePath();
+    ctx.fill();
+    // Hot core keeps the brightest ghost from looking like flat paint.
+    ctx.globalAlpha = a * 0.9;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.ellipse(0, -24, 4.2, 15, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/**
+ * COSMIC ULTRA INSTINCT AURA
+ *
+ * Two concentric shells plus a ground distortion ring:
+ *   1. OUTER CORONA — a violet->cyan nebula with drifting stardust. This is the
+ *      part that says "space is bending around him".
+ *   2. INNER CORE — silver heat haze built from sine-warped tongues, which is
+ *      the part that says "the air itself is boiling".
+ *   3. GROUND RING — a flat distortion ellipse at the feet that flares on a dash
+ *      or a landing, and widens while an instant transmission resolves.
+ *
+ * Drawn in the fighter's own local space, so facing, scale and squash all carry
+ * through for free. `k` is 0..1 and scales the whole shell.
+ */
+export function drawCosmicAura(ctx: CanvasRenderingContext2D, f: any, L: Look, hy: number, time: number, k = 1) {
+  const power = Math.max(0, Math.min(1.35, k));
+  if (power <= 0.02) return;
+  const VIOLET = '139,92,246';   // #8b5cf6 — nebula deep
+  const CYAN = '56,189,248';     // #38bdf8 — neon rim
+  const cy = hy - 24;
+  // Dashing, landing and an instant slip all widen the shell for a few frames.
+  const speed = Math.abs((f.vx as number) || 0);
+  const flare = 1 + Math.min(0.55, speed * 0.035) + (f.landT > 0 ? Math.min(0.5, f.landT * 0.06) : 0) + (f.evadeT > 0 ? 0.7 : 0);
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  // ---- 1. OUTER CORONA -----------------------------------------------------
+  const R = 54 * power * flare;
+  const neb = ctx.createRadialGradient(0, cy, 2, 0, cy, R);
+  neb.addColorStop(0, 'rgba(255,255,255,0)');
+  neb.addColorStop(0.22, `rgba(${VIOLET},${0.3 * power})`);
+  neb.addColorStop(0.55, `rgba(${CYAN},${0.2 * power})`);
+  neb.addColorStop(0.82, `rgba(${VIOLET},${0.1 * power})`);
+  neb.addColorStop(1, `rgba(${CYAN},0)`);
+  ctx.fillStyle = neb;
+  ctx.beginPath(); ctx.ellipse(0, cy, R, R * 1.12, 0, 0, Math.PI * 2); ctx.fill();
+
+  // A second, offset shell rotated against the first: two nebulae in parallax
+  // read as depth rather than as a single flat disc.
+  ctx.save();
+  ctx.rotate(time * 0.013);
+  const neb2 = ctx.createRadialGradient(0, 0, 2, 0, 0, R * 0.8);
+  neb2.addColorStop(0, 'rgba(255,255,255,0)');
+  neb2.addColorStop(0.4, `rgba(${CYAN},${0.22 * power})`);
+  neb2.addColorStop(1, `rgba(${VIOLET},0)`);
+  ctx.fillStyle = neb2;
+  ctx.beginPath(); ctx.ellipse(0, 0, R * 0.8, R * 0.58, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // ---- 2. INNER CORE — silver heat haze ------------------------------------
+  // Tapered tongues rather than a row of parallel bars: each one leans with the
+  // flame, narrows toward the tip and is widest where it leaves the body, so the
+  // core reads as rising heat instead of a fence behind the fighter.
+  const tongues = 5;
+  for (let i = 0; i < tongues; i++) {
+    const u = (i / (tongues - 1)) * 2 - 1;
+    const lean = u * 7 + Math.sin(time * .11 + i * 1.9) * 3.5;
+    const baseX = u * 11;
+    const baseW = 7.5 - Math.abs(u) * 2.2;
+    const h = (40 + Math.sin(time * .17 + i * 1.7) * 8) * power * flare;
+    const hot = 0.5 + 0.5 * Math.sin(time * .24 + i * 1.3);
+    const segs = 5;
+    // Leading edge climbs, trailing edge returns, forming one closed flame.
+    const edge = (dir: number) => {
+      for (let j = 0; j <= segs; j++) {
+        const kk = j / segs;
+        const rip = Math.sin(kk * 8.6 + time * .44 + i * 2.3) * 2.6 * kk
+          + Math.sin(kk * 16.4 - time * .7 + i) * 1.2 * kk;
+        const w = baseW * (1 - kk * .88) * dir;
+        const x = baseX + lean * kk * kk + rip;
+        const y = hy + 2 - h * kk;
+        j ? ctx.lineTo(x + w, y) : ctx.moveTo(x + w, y);
+      }
+    };
+    ctx.beginPath();
+    edge(1);
+    for (let j = segs; j >= 0; j--) {
+      const kk = j / segs;
+      const rip = Math.sin(kk * 8.6 + time * .44 + i * 2.3) * 2.6 * kk
+        + Math.sin(kk * 16.4 - time * .7 + i) * 1.2 * kk;
+      ctx.lineTo(baseX + lean * kk * kk + rip - baseW * (1 - kk * .88), hy + 2 - h * kk);
+    }
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${hot > .5 ? '255,255,255' : CYAN},${(0.09 + hot * 0.11) * power})`;
+    ctx.fill();
+  }
+  // White-hot heart.
+  const heart = ctx.createRadialGradient(0, hy - 14, 1, 0, hy - 14, 28 * power);
+  heart.addColorStop(0, `rgba(255,255,255,${0.4 * power})`);
+  heart.addColorStop(0.35, `rgba(226,232,240,${0.19 * power})`);
+  heart.addColorStop(1, 'rgba(226,232,240,0)');
+  ctx.fillStyle = heart;
+  ctx.beginPath(); ctx.ellipse(0, hy - 14, 28 * power, 32 * power, 0, 0, Math.PI * 2); ctx.fill();
+
+  // ---- 3. STARDUST ---------------------------------------------------------
+  for (let i = 0; i < 9; i++) {
+    const ph = (time * 0.6 + i * 41) % 70 / 70;
+    const a = i * 1.37 + time * 0.02;
+    const rad = (16 + (i % 4) * 11) * power;
+    const px = Math.cos(a) * rad * (0.7 + ph * 0.8);
+    const py = hy + 4 - ph * (52 + (i % 3) * 16) * power;
+    ctx.globalAlpha = (1 - ph) * 0.75 * power;
+    ctx.fillStyle = i % 3 === 0 ? '#ffffff' : i % 3 === 1 ? '#93c5fd' : '#a5f3fc';
+    ctx.beginPath(); ctx.arc(px, py, 0.9 + (1 - ph) * 1.7, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ---- 4. GROUND DISTORTION RING ------------------------------------------
+  if (f.grounded !== false) {
+    const gr = 30 * power * flare;
+    const ring = ctx.createRadialGradient(0, hy + 2, 1, 0, hy + 2, gr);
+    ring.addColorStop(0, `rgba(255,255,255,${0.34 * power})`);
+    ring.addColorStop(0.35, `rgba(${CYAN},${0.22 * power})`);
+    ring.addColorStop(0.72, `rgba(${VIOLET},${0.12 * power})`);
+    ring.addColorStop(1, 'rgba(139,92,246,0)');
+    ctx.fillStyle = ring;
+    ctx.beginPath(); ctx.ellipse(0, hy + 2, gr, gr * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+    // Compression wavefront skating outward across the floor.
+    const wob = 1 + Math.sin(time * .6) * 0.05;
+    ctx.strokeStyle = `rgba(226,232,240,${0.4 * power})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.ellipse(0, hy + 2, gr * 0.92 * wob, gr * 0.27 * wob, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+  // The fighter's own energy colour is folded into the shell so a character who
+  // is not silver-haired still gets a corona tuned to their palette.
+  if (L.energy2) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.16 * power;
+    ctx.strokeStyle = L.energy2; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.ellipse(0, hy - 26, 44 * power, 52 * power, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
 }
 
 /**

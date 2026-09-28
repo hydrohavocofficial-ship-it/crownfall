@@ -2,7 +2,7 @@ import { HitDef, MoveDef, AnimName } from './types';
 import { Look } from './render';
 import { sfx } from './audio';
 import { makePortrait } from './portraits';
-import { applySignatures } from './abilities';
+import { applySignatures, mergeSignatures } from './abilities';
 import { installTechniques, type TechniqueMoveKey } from './techniques';
 import leviPortrait from '../assets/portraits/levi.jpg';
 import killuaPortrait from '../assets/portraits/killua.jpg';
@@ -12,6 +12,7 @@ import astaPortrait from '../assets/portraits/asta.jpg';
 import { SUKUNA } from './sukuna';
 import { SHADOW_DIO } from './shadowdio';
 import { GOKU_BLACK } from './gokublack';
+import { GOKU_UI } from './goku_ui';
 import { applyArtDirection } from './artDirection';
 import { installBossKit } from './bossKits';
 
@@ -22,9 +23,17 @@ export type CoreMoveKey =
   | 'nair' | 'nair2' | 'nair_spec'
   | 'sair' | 'sair2' | 'sair_spec'
   | 'dair' | 'nsig' | 'ssig' | 'dsig' | 'rec' | 'gp'
-  | 'nspec' | 'sspec' | 'dspec' | 'ult';
+  | 'nspec' | 'sspec' | 'dspec';
 export type ExtraMoveKey = 'aspec' | 'aig' | 'boss_heavy2' | 'boss_finisher';
 export type MoveKey = CoreMoveKey | TechniqueMoveKey | ExtraMoveKey;
+
+/**
+ * A fighter's authored base kit.
+ *
+ * `ult` is not a move and never reaches `moves`: it is a retained set-piece the
+ * technique builder re-homes as the neutral awakened special. See `CharDef.domain`.
+ */
+export type CoreKit = Record<CoreMoveKey, MoveDef> & { ult?: MoveDef };
 
 export interface MoveVariantBranch { input: string; name: string; desc: string }
 export interface CharDef {
@@ -34,9 +43,27 @@ export interface CharDef {
   statBars: { power: number; speed: number; range: number; defense: number };
   look: Look;
   moves: Record<CoreMoveKey | TechniqueMoveKey, MoveDef> & Partial<Record<ExtraMoveKey, MoveDef>>;
+  /**
+   * A retained set-piece, and the only place a move that is not bound to a
+   * button can live.
+   *
+   * The ultimate is gone as a button, but a Malevolent Shrine, a Hollow Purple
+   * and a Rumbling are why those characters are on the roster at all. Whatever
+   * used to sit on `ult` is kept here and handed to the technique builder, which
+   * re-homes it as the neutral awakened special at reduced power. It is not in
+   * `moves`, so it is not on the move list and not reachable on its own.
+   */
+  domain?: MoveDef;
   moveBranches: MoveVariantBranch[];
   abilities: { key: string; name: string; desc: string }[];
   passives?: { name: string; desc: string }[];
+  /**
+   * Ultra Instinct form. When set, the fighter's transformation state repaints
+   * him in the silver crown, the concentric eyes and the cosmic aura — so an
+   * existing roster member can tap into the God-Tier look and numbers on his
+   * Awakening without needing a second character definition.
+   */
+  uiForm?: boolean;
   ai: { vertSpec?: MoveKey; horizSpec?: MoveKey; zoneSpec?: MoveKey; counterSpec?: MoveKey; ultRange: number };
 }
 
@@ -63,33 +90,45 @@ const cSA = (w: [number, number]) => ({ light: 'sair2', special: 'sair_spec', wi
 interface Spec {
   id: string; name: string; anime: string; title: string; desc: string; color: string; img?: string; tier?: string;
   stats: CharDef['stats']; bars: CharDef['statBars']; look: Look;
-  moves: Record<CoreMoveKey, MoveDef>; ai: CharDef['ai'];
+  moves: CoreKit; ai: CharDef['ai'];
+  /** Repaints the fighter in the Ultra Instinct silver form on transformation. */
+  uiForm?: boolean;
 }
 function mk(s: Spec): CharDef {
-  const m = installTechniques(s.id, s.look, s.moves) as Record<MoveKey, MoveDef>;
+  // Signature overrides land first, because one of the things they produce is the
+  // retained set-piece - and the technique builder needs that in hand to re-home
+  // it as the neutral awakened special rather than let it sit unreachable.
+  const merged = mergeSignatures(s.id, s.moves as Record<string, MoveDef>);
+  const m = installTechniques(s.id, s.look, merged.moves as Record<CoreMoveKey, MoveDef>, merged.domain) as Record<MoveKey, MoveDef>;
   return {
     id: s.id, styleId: s.id, name: s.name, anime: s.anime, title: s.title, desc: s.desc, color: s.color, tier: s.tier,
     portrait: makePortrait(s.id, s.look, s.color),
-    stats: s.stats, statBars: s.bars, look: s.look, moves: m,
+    stats: s.stats, statBars: s.bars, look: s.look, moves: m, domain: merged.domain,
+    // Base Goku's Awakening is already named Ultra Instinct, so his
+    // transformation state repaints him in the silver crown and the cosmic
+    // shell — the God-Tier look, on the fighter who earned it first.
+    uiForm: s.uiForm,
     moveBranches: [
-      { input: 'H → H → H', name: `${m.nlight.name} Chain`, desc: `${m.nlight.name} → ${m.nlight2.name} → ${m.nlight3.name}.` },
-      { input: 'H → K', name: m.nlight_spec.name!, desc: 'Cancels the light string into a signature EX burst.' },
-      { input: 'H → J', name: m.nlight_heavy.name!, desc: 'Launcher finisher that pops foes into juggle range.' },
-      { input: '→ H → H / K / J', name: m.slight2.name!, desc: `${m.slight.name} extends into ${m.slight2.name}, ${m.slight_spec.name} or ${m.slight_heavy.name}.` },
-      { input: '↓ H → H / K', name: m.dlight2.name!, desc: `${m.dlight.name} extends into ${m.dlight2.name} or ${m.dlight_spec.name}.` },
-      { input: 'Air H → H / K', name: m.nair2.name!, desc: `${m.nair.name} chains into ${m.nair2.name} or ${m.nair_spec.name}.` },
-      { input: 'L · N / → / ↓ / Air', name: m.nex.name!, desc: `Limit Break has four unique stances: ${m.nex.name}, ${m.sex.name}, ${m.dex.name}, and ${m.aex.name}.` },
-      { input: 'U · N / → / ↓ / Air', name: m.naw.name!, desc: `Awaken has four unique stances: ${m.naw.name}, ${m.saw.name}, ${m.daw.name}, and ${m.aaw.name}.` },
-      { input: 'U → K', name: m.nfu.name!, desc: `K immediately after U performs the awakened variant. Direction selects ${m.sfu.name}, ${m.dfu.name}, or ${m.afu.name}.` },
+      { input: 'J → J → J', name: `${m.nlight.name} Chain`, desc: `${m.nlight.name} → ${m.nlight2.name} → ${m.nlight3.name}.` },
+      { input: 'J → L', name: m.nlight_spec.name!, desc: 'Cancels the light string into a signature EX burst.' },
+      { input: 'J → K', name: m.nlight_heavy.name!, desc: 'Launcher finisher that pops foes into juggle range.' },
+      { input: '→ J → J / L / K', name: m.slight2.name!, desc: `${m.slight.name} extends into ${m.slight2.name}, ${m.slight_spec.name} or ${m.slight_heavy.name}.` },
+      { input: '↓ J → J / L', name: m.dlight2.name!, desc: `${m.dlight.name} extends into ${m.dlight2.name} or ${m.dlight_spec.name}.` },
+      { input: 'Air J → J / L', name: m.nair2.name!, desc: `${m.nair.name} chains into ${m.nair2.name} or ${m.nair_spec.name}.` },
+      { input: 'L · N / → / ↓ / Air', name: m.nspec.name!, desc: `${m.nspec.desc} Four stances: ${m.nspec.name}, ${m.sspec.name}, ${m.dspec.name}, ${m.aspec?.name ?? m.sspec.name}.` },
+      { input: `R @ full gauge · N / → / ↓ / Air`, name: m.naw.name!, desc: `Spends the whole gauge to Awaken. Direction picks the transformation stance: ${m.naw.name}, ${m.saw.name}, ${m.daw.name}, ${m.aaw.name}.` },
+      { input: 'AWAKENED · J', name: m.nwl.name!, desc: `${m.nwl.desc} Stances: ${m.swl.name}, ${m.dwl.name}, ${m.awl.name}.` },
+      { input: 'AWAKENED · K', name: m.nwh.name!, desc: `${m.nwh.desc} Chains into the matching special. Stances: ${m.swh.name}, ${m.dwh.name}, ${m.awh.name}.` },
+      { input: 'AWAKENED · L', name: m.nfu.name!, desc: `${m.nfu.desc} Stances: ${m.nfu.name}, ${m.sfu.name}, ${m.dfu.name}, ${m.afu.name}.` },
     ],
     abilities: [
-      { key: 'K · Neutral Special', name: m.nspec.name!, desc: m.nspec.desc! },
-      { key: 'K · Side Special', name: m.sspec.name!, desc: m.sspec.desc! },
-      { key: 'K · Down Special', name: m.dspec.name!, desc: m.dspec.desc! },
-      { key: 'L · Limit Break', name: m.nex.name!, desc: `${m.nex.desc} Stances: ${m.sex.name} / ${m.dex.name} / ${m.aex.name}.` },
-      { key: 'U · Awaken', name: m.naw.name!, desc: `${m.naw.desc} Stances: ${m.saw.name} / ${m.daw.name} / ${m.aaw.name}.` },
-      { key: 'U → K · Awakened', name: m.nfu.name!, desc: `${m.nfu.desc} Follow-up variants: ${m.sfu.name}, ${m.dfu.name}, ${m.afu.name}.` },
-      { key: 'R · ULTIMATE', name: m.ult.name!, desc: m.ult.desc! },
+      { key: 'L · Neutral Special', name: m.nspec.name!, desc: m.nspec.desc! },
+      { key: 'L · Side Special', name: m.sspec.name!, desc: m.sspec.desc! },
+      { key: 'L · Down Special', name: m.dspec.name!, desc: m.dspec.desc! },
+      { key: 'R · Awaken (full gauge)', name: m.naw.name!, desc: `${m.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+      { key: 'AWAKENED · J · Light', name: m.nwl.name!, desc: m.nwl.desc! },
+      { key: 'AWAKENED · K · Heavy', name: m.nwh.name!, desc: m.nwh.desc! },
+      { key: 'AWAKENED · L · Special', name: m.nfu.name!, desc: m.nfu.desc! },
     ],
     ai: s.ai,
   };
@@ -97,9 +136,19 @@ function mk(s: Spec): CharDef {
 const ST = (speed: number, air: number, jump: number, weight: number, scale: number, gravity = 0.61) => ({ speed, air, jump, weight, scale, gravity });
 const BR = (power: number, speed: number, range: number, defense: number) => ({ power, speed, range, defense });
 
-// shared ultimate bodies (each gets its own VFX + colours)
-const uTransform = (name: string, label: string, desc: string, mode: 'god' | 'devil', col: string, vfx: string, dur = 580): MoveDef => ({
-  name, ult: label, desc, dur: 52, startup: 22, anim: 'castUp', invuln: [0, 40], grav: 0.2, vfx, cin: 46,
+// ---------------------------------------------------------------------------
+// RETAINED SET-PIECES
+//
+// These are the bodies that used to sit on `ult`. The ultimate is gone as a
+// button, but the transformation bursts, the beam columns and the summoned
+// avatars are the biggest moments these fighters have, so they are kept as raw
+// material: `mk` lifts whatever is on `ult` out of the move table and hands it
+// to the technique builder, which re-homes it as the neutral awakened special at
+// half power with a shorter cast. They are deliberately not in `moves` - nothing
+// here is reachable on its own.
+// ---------------------------------------------------------------------------
+const dTransform = (name: string, label: string, desc: string, mode: 'god' | 'devil', col: string, vfx: string, dur = 580): MoveDef => ({
+  name, desc, dur: 52, startup: 22, anim: 'castUp', invuln: [0, 40], grav: 0.2, vfx, cin: 46,
   hits: [H(22, 30, 0, -42, 320, 240, 11, 60, 7.2, 6.2, { fx: 'blunt' })],
   onFrame: (f: any, fr: number, g: any) => {
     // Charge: a rising column of light and three tightening rings.
@@ -131,8 +180,8 @@ const uTransform = (name: string, label: string, desc: string, mode: 'god' | 'de
     }
   },
 });
-const uRush = (name: string, label: string, desc: string, col: string, fx: FXK, vfx: string): MoveDef => ({
-  name, ult: label, desc, dur: 46, startup: 10, anim: 'thrust', grav: 0, invuln: [0, 999], vfx, cin: 40,
+const dRush = (name: string, label: string, desc: string, col: string, fx: FXK, vfx: string): MoveDef => ({
+  name, desc, dur: 46, startup: 10, anim: 'thrust', grav: 0, invuln: [0, 999], vfx, cin: 40,
   vel: [[0, 0, 0], [10, 25, 0], [26, 1, 0]],
   hits: [H(10, 26, 34, -44, 96, 96, 4, 80, 1, 0, { fx })],
   onHit: (f: any, t: any) => { if (!f.ultTarget) { f.ultTarget = t; f.ultStart = f.moveFrame; f.moveDur = f.moveFrame + 72; } },
@@ -162,14 +211,15 @@ const uRush = (name: string, label: string, desc: string, col: string, fx: FXK, 
       g.fx.slash(t.x, t.y - 42, 74, -1.4, 1.6, f.facing, '#ffffff', 28, 20);
       g.fx.impact(t.x, t.y - 42, 120, col);
       g.fx.ring(t.x, t.y - 42, 12, 190, col, 22, 10);
+      g.fx.text(f.x, f.y - 150, label, '#ffffff', 28, 60);
       g.applyHit(f, t, { dmg: 16, ang: 42, kb: 10, sc: 9.9, fx }, f.facing, t.x, t.y - 42);
       g.shake(26); g.flashScreen('#ffffff', 0.7);
       f.ultTarget = null; f.moveDur = fr + 14;
     }
   },
 });
-const uBeam = (name: string, label: string, desc: string, col: string, fx: FXK, style: any, vfx: string): MoveDef => ({
-  name, ult: label, desc, dur: 76, startup: 26, anim: 'cast', invuln: [0, 44], grav: 0.25, hits: [], vfx, cin: 42,
+const dBeam = (name: string, label: string, desc: string, col: string, fx: FXK, style: any, vfx: string): MoveDef => ({
+  name, desc, dur: 76, startup: 26, anim: 'cast', invuln: [0, 44], grav: 0.25, hits: [], vfx, cin: 42,
   onFrame: (f: any, fr: number, g: any) => {
     if (fr < 26) {
       // Telegraph: a widening lens and converging motes make the shot readable.
@@ -183,13 +233,14 @@ const uBeam = (name: string, label: string, desc: string, col: string, fx: FXK, 
       g.spawnProj({ owner: f, type: 'fireball', style, col, col2: '#ffffff', x: f.x + f.facing * 70, y: f.y - 50, vx: f.facing * 15, vy: 0, w: 170, h: 170, grow: 3.6, life: 70, dmg: 4.2, rehit: 5, pull: true, ang: 38, kb: 3.4, sc: 1.2, fx, dir: f.facing, fin: { dmg: 20, ang: 42, kb: 10, sc: 9.8 } });
       g.fx.ring(f.x + f.facing * 70, f.y - 50, 14, 260, col, 24, 14);
       g.fx.impact(f.x + f.facing * 70, f.y - 50, 120, '#ffffff');
+      g.fx.text(f.x, f.y - 160, label, '#ffffff', 28, 62);
       sfx('ult'); g.shake(24); g.flashScreen(col, 0.6);
     }
     if (fr > 26 && fr < 62 && fr % 3 === 0) g.shake(7);
   },
 });
-const uDragon = (name: string, label: string, desc: string, col: string, fx: FXK, vfx: string): MoveDef => ({
-  name, ult: label, desc, dur: 66, startup: 24, anim: 'thrust', invuln: [0, 46], grav: 0.3, hits: [], vfx, cin: 40,
+const dDragon = (name: string, label: string, desc: string, col: string, fx: FXK, vfx: string): MoveDef => ({
+  name, desc, dur: 66, startup: 24, anim: 'thrust', invuln: [0, 46], grav: 0.3, hits: [], vfx, cin: 40,
   onFrame: (f: any, fr: number, g: any) => {
     if (fr < 24) {
       const k = fr / 24;
@@ -200,12 +251,13 @@ const uDragon = (name: string, label: string, desc: string, col: string, fx: FXK
     if (fr === 24) {
       g.spawnProj({ owner: f, type: 'dragon', col, col2: '#ffe08a', x: f.x + f.facing * 40, y: f.y - 60, vx: f.facing * 14, vy: 0, w: 260, h: 190, life: 78, dmg: 3.2, rehit: 5, pull: true, ang: 40, kb: 2, sc: 0, fx, dir: f.facing, fin: { dmg: 18, ang: 45, kb: 9.4, sc: 9.8 } });
       sfx('ult'); sfx('fire'); g.shake(18); g.flashScreen(col, 0.45);
+      g.fx.text(f.x, f.y - 158, label, '#ffffff', 28, 62);
       g.fx.ring(f.x + f.facing * 40, f.y - 60, 16, 220, col, 22, 12);
     }
   },
 });
-const uSummon = (name: string, label: string, desc: string): MoveDef => ({
-  name, ult: label, desc, dur: 92, startup: 30, anim: 'castUp', invuln: [0, 92], grav: 0.2, hits: [], cin: 44,
+const dSummon = (name: string, label: string, desc: string): MoveDef => ({
+  name, desc, dur: 92, startup: 30, anim: 'castUp', invuln: [0, 92], grav: 0.2, hits: [], cin: 44,
   onFrame: (f: any, fr: number, g: any) => {
     // A summoning circle draws itself on the floor, then the avatar erupts.
     if (fr < 30) {
@@ -218,13 +270,14 @@ const uSummon = (name: string, label: string, desc: string): MoveDef => ({
     if (fr === 30) {
       g.spawnProj({ owner: f, type: 'susanoo', x: f.x, y: f.y, vx: 0, vy: 0, w: 780, h: 480, life: 100, delay: 52, activeFor: 12, dmg: 32, ang: 40, kb: 10, sc: 10, fx: 'purple', dir: f.facing, follow: true, ox: 300, oy: -170 });
       g.fx.ring(f.x, f.y - 4, 18, 320, '#b067ff', 26, 16);
+      g.fx.text(f.x, f.y - 172, label, '#ffffff', 30, 76);
       g.flashScreen('#d0a0ff', 0.5); g.shake(20); sfx('ult');
     }
     f.auraT = 4;
   },
 });
-const uMeteor = (name: string, label: string, desc: string, col: string, fx: FXK, vfx: string): MoveDef => ({
-  name, ult: label, desc, dur: 76, startup: 30, anim: 'slam', invuln: [0, 48], grav: 0.2, vfx, cin: 44,
+const dMeteor = (name: string, label: string, desc: string, col: string, fx: FXK, vfx: string): MoveDef => ({
+  name, desc, dur: 76, startup: 30, anim: 'slam', invuln: [0, 48], grav: 0.2, vfx, cin: 44,
   vel: [[0, 0, -13], [30, 6, 26]],
   hits: [H(30, 46, 30, -30, 330, 240, 30, 52, 9.5, 9.9, { fx })],
   onFrame: (f: any, fr: number, g: any) => {
@@ -245,6 +298,7 @@ const uMeteor = (name: string, label: string, desc: string, col: string, fx: FXK
       g.fx.ring(f.x, f.y, 20, 250, '#ffffff', 22, 10);
       g.fx.impact(f.x, f.y - 30, 200, col);
       g.fx.burst(f.x, f.y - 20, 40, col, 14, 'ember', 40, 10);
+      g.fx.text(f.x, f.y - 170, label, '#ffffff', 30, 76);
       g.flashScreen('#ffffff', 0.45);
       sfx('heavyhit', 2);
     }
@@ -290,7 +344,7 @@ mk({ id: 'levi', name: 'Levi Ackerman', anime: 'Attack on Titan', title: "Humani
       { cd: 132, grav: 0, vel: [[0, 0, 0], [6, 26, -1.5], [20, 4, null]], vfx: 'odmWire', desc: 'Fires grapple hooks and rockets across the entire stage instantly.' }),
     dspec: mv('ODM Ascent', 'upslash', 32, 5, [H(5, 14, 16, -74, 62, 88, 10, 88, 6.0, 6.8, { fx: 'slash' })],
       { cd: 172, grav: 0.5, vel: [[5, 0, -19]], vfx: 'odmWire', desc: 'Anchors to the sky and rides the wire up through a rising cross-slash.' }),
-    ult: uRush("Humanity's Strongest", "HUMANITY'S STRONGEST", 'Vanishes entirely, then dismantles a single target from every angle at once.', '#d8f6ff', 'slash', 'odmWire'),
+    ult: dRush("Humanity's Strongest", "HUMANITY'S STRONGEST", 'Vanishes entirely, then dismantles a single target from every angle at once.', '#d8f6ff', 'slash', 'odmWire'),
   },
   ai: { vertSpec: 'dspec', horizSpec: 'sspec', ultRange: 400 } }),
 
@@ -330,7 +384,7 @@ mk({ id: 'killua', name: 'Killua Zoldyck', anime: 'Hunter x Hunter', title: 'Lig
       { cd: 132, grav: 0, vel: [[0, 0, 0], [6, 21, 0], [16, 2, null]], trail: 'hand', vfx: 'zap', desc: 'Electrified dash-palm that locks foes in place with heavy paralysis.' }),
     dspec: mv('Assassin Counter', 'counter', 38, 2, [], { cd: 162, counter: [2, 24], vfx: 'zapAura', desc: 'Flashes behind any melee attacker and drives a lethal charge through them.',
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); g.flashScreen('#8fe6ff', 0.35); const ox = f.x; f.x = a.x - a.facing * 52; f.y = a.y; f.facing = a.x > f.x ? 1 : -1; g.fx.bolt(ox, f.y - 40, f.x, f.y - 40, '#8fe6ff', 12, 3); f.invuln = 20; g.applyHit(f, a, { dmg: 15, ang: 45, kb: 7.2, sc: 8.4, fx: 'elec', stun: 8 }, f.facing, a.x, a.y - 42); f.moveFrame = 26; } }),
-    ult: uTransform('Godspeed', 'GODSPEED', 'Becomes living lightning — reflex-speed movement and electrified everything.', 'god', '#8fe6ff', 'godspeedBlur', 620),
+    ult: dTransform('Godspeed', 'GODSPEED', 'Becomes living lightning — reflex-speed movement and electrified everything.', 'god', '#8fe6ff', 'godspeedBlur', 620),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', counterSpec: 'dspec', ultRange: 560 } }),
 
@@ -370,7 +424,7 @@ mk({ id: 'rengoku', name: 'Kyojuro Rengoku', anime: 'Demon Slayer', title: 'The 
       { cd: 152, grav: 0, invuln: [8, 15], vel: [[0, 0, 0], [8, 26, 0], [16, 3, null]], vfx: 'flameTrail', desc: 'First Form: an explosive intangible flash-step slash trailing fire.' }),
     dspec: mv('Blazing Universe', 'slam', 46, 14, [H(14, 22, 44, -22, 190, 72, 16, 64, 7.2, 9.0, { fx: 'fire' })],
       { cd: 200, vfx: 'flameTiger', desc: 'Third Form: carves a colossal flaming arc that erupts along the ground.' }),
-    ult: uDragon('Ninth Form: Rengoku', 'NINTH FORM: RENGOKU', 'Becomes a blazing dragon of flame that devours everything in its path.', '#ff7a1a', 'fire', 'flameTrail'),
+    ult: dDragon('Ninth Form: Rengoku', 'NINTH FORM: RENGOKU', 'Becomes a blazing dragon of flame that devours everything in its path.', '#ff7a1a', 'fire', 'flameTrail'),
   },
   ai: { vertSpec: 'nspec', horizSpec: 'sspec', ultRange: 680 } }),
 
@@ -410,7 +464,7 @@ mk({ id: 'madara', name: 'Madara Uchiha', anime: 'Naruto', title: 'Ghost of the 
       onFrame: (f: any, fr: number, g: any) => { if (fr === 6) { g.spawnProj({ owner: f, type: 'arm', x: f.x, y: f.y, vx: 0, vy: 0, w: 240, h: 155, life: 26, delay: 6, activeFor: 8, dmg: 16, ang: 40, kb: 7, sc: 8.2, fx: 'purple', dir: f.facing, follow: true, ox: 132, oy: -70 }); sfx('purple'); } } }),
     dspec: mv('Wood Release: Spikes', 'slam', 44, 14, [], { cd: 198, vfx: 'hardenCrack', desc: 'Enormous wooden spikes erupt from the ground on both sides of him.',
       onFrame: (f: any, fr: number, g: any) => { if (fr === 14) { sfx('heavyhit'); for (let i = 0; i < 3; i++) for (const d of [-1, 1]) g.spawnProj({ owner: f, type: 'spike', x: f.x + d * (80 + i * 84), y: f.y, vx: 0, vy: 0, w: 54, h: 128, life: 22 + i * 6, delay: i * 5, activeFor: 10, dmg: 9.5, ang: 80, kb: 6, sc: 5.4, fx: 'blunt', dir: d, ground: true }); } } }),
-    ult: uSummon('Perfect Susanoo', 'PERFECT SUSANOO', 'Summons a mountain-sized avatar that cleaves the entire arena in half.'),
+    ult: dSummon('Perfect Susanoo', 'PERFECT SUSANOO', 'Summons a mountain-sized avatar that cleaves the entire arena in half.'),
   },
   ai: { zoneSpec: 'nspec', horizSpec: 'sspec', ultRange: 680 } }),
 
@@ -452,13 +506,13 @@ mk({ id: 'asta', name: 'Asta', anime: 'Black Clover', title: 'Anti-Magic Knight'
     dspec: mv('Anti-Magic Reflect', 'counter', 38, 2, [], { cd: 142, counter: [2, 22], vfx: 'voidAura', desc: 'Nullifies and reflects any projectile, and counters melee with a crushing slash.',
       onFrame: (f: any, fr: number, g: any) => { if (fr < 22) for (const p of g.projectiles) { if (p.owner !== f && p.reflectable !== false && Math.abs(p.x - f.x) < 96 + p.w / 2 && Math.abs(p.y - (f.y - 44)) < 86 + p.h / 2) { p.owner = f; p.vx = -p.vx * 1.35 || f.facing * 11; p.dir = Math.sign(p.vx) || f.facing; p.hitMap = new Map(); p.dmg *= 1.35; g.fx.ring(f.x + f.facing * 30, f.y - 44, 10, 64, '#e0203a', 14, 6); sfx('counter'); } } },
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); g.flashScreen('#e0203a', 0.3); f.facing = a.x > f.x ? 1 : -1; f.invuln = 18; g.fx.slash(f.x, f.y - 44, 72, -1.5, 1.5, f.facing, '#e0203a', 28, 16); g.applyHit(f, a, { dmg: 14, ang: 40, kb: 7.2, sc: 8.2, fx: 'dark' }, f.facing, a.x, a.y - 42); f.moveFrame = 26; } }),
-    ult: uTransform('Devil Union', 'DEVIL UNION', 'Fuses with his devil — horn, wing and anti-magic that erases everything.', 'devil', '#e0203a', 'voidAura', 680),
+    ult: dTransform('Devil Union', 'DEVIL UNION', 'Fuses with his devil — horn, wing and anti-magic that erases everything.', 'devil', '#e0203a', 'voidAura', 680),
   },
   ai: { horizSpec: 'nspec', counterSpec: 'dspec', ultRange: 340 } }),
 
 // ---------------- GOKU : ki fundamentals, strong aerials ----------------
-mk({ id: 'goku', name: 'Son Goku', anime: 'Dragon Ball', title: 'Saiyan Raised on Earth', tier: 'S', color: '#ff8a1a',
-  desc: 'Textbook martial artist. Crisp, evenly-spaced strikes that flow into ki bursts, with the best air-to-air game around.',
+mk({ id: 'goku', name: 'Son Goku', anime: 'Dragon Ball', title: 'Saiyan Raised on Earth', tier: 'S', color: '#ff8a1a', uiForm: true,
+  desc: 'Textbook martial artist. Crisp, evenly-spaced strikes that flow into ki bursts, with the best air-to-air game around. His Awakening is Ultra Instinct: the transformation repaints him in silver and turns the whole frame silver with him, and his awakened special is the Spirit Bomb at half its old weight.',
   stats: ST(7.0, 6.9, 13.9, 0.99, 0.98, 0.59), bars: BR(4, 4, 4, 4),
   look: { skin: '#f6cfa8', hair: '#16130f', hairStyle: 'spikeLong', top: '#ff7a14', top2: '#1a5ed8', sleeve: '#ff7a14', fore: '#f6cfa8', pants: '#ff7a14', boots: '#1a5ed8', eye: '#1a90ff', weapon: 'claws', energy: '#ffd24a', energy2: '#8fe3ff' },
   moves: {
@@ -509,7 +563,7 @@ mk({ id: 'goku', name: 'Son Goku', anime: 'Dragon Ball', title: 'Saiyan Raised o
       { cd: 145, grav: 0, vel: [[0, 0, 0], [7, 24, -2], [18, 2, null]], vfx: 'dragonFist', desc: 'Rockets forward with a dragon-wreathed fist that carries foes with him.' }),
     dspec: mv('Instant Shield', 'counter', 38, 2, [], { cd: 155, counter: [2, 22], invuln: [2, 22], vfx: 'kiCharge', desc: 'Ki barrier — teleports behind the attacker and crushes them.',
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); f.x = a.x - a.facing * 52; f.y = a.y; f.facing = a.x > f.x ? 1 : -1; f.invuln = 18; g.flashScreen('#ffd24a', 0.3); g.applyHit(f, a, { dmg: 14.5, ang: 42, kb: 7.4, sc: 8.2, fx: 'fire' }, f.facing, a.x, a.y - 42); f.moveFrame = 26; } }),
-    ult: uTransform('Super Saiyan', 'SUPER SAIYAN', 'Golden hair, blazing aura, and power that dwarfs everything before it.', 'god', '#ffd24a', 'kiCharge', 600),
+    ult: dTransform('Super Saiyan', 'SUPER SAIYAN', 'Golden hair, blazing aura, and power that dwarfs everything before it.', 'god', '#ffd24a', 'kiCharge', 600),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', counterSpec: 'dspec', ultRange: 560 } }),
 
@@ -550,7 +604,7 @@ mk({ id: 'ichigo', name: 'Ichigo Kurosaki', anime: 'Bleach', title: 'Substitute 
       { cd: 138, grav: 0, invuln: [6, 15], vel: [[0, 0, 0], [6, 25, 0], [17, 2, null]], vfx: 'reiatsu', desc: 'Blinks forward in a violet blur, cleaving anything caught inside.' }),
     dspec: mv('Bankai Counter', 'counter', 40, 2, [], { cd: 174, counter: [2, 26], invuln: [2, 26], vfx: 'reiatsu', desc: 'Counter stance that answers any strike with a skyward spirit slash.',
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); f.facing = a.x > f.x ? 1 : -1; f.invuln = 18; g.flashScreen('#6a5cff', 0.32); g.spawnProj({ owner: f, type: 'wave', x: f.x, y: f.y - 90, vx: 0, vy: -10, w: 150, h: 230, life: 24, dmg: 17, ang: 85, kb: 9, sc: 9.8, fx: 'dark', dir: f.facing, follow: true, ox: 0, oy: -60 }); } }),
-    ult: uTransform('Bankai', 'BANKAI', 'Releases Tensa Zangetsu — crushing spirit pressure and blinding speed.', 'god', '#6a5cff', 'reiatsu', 600),
+    ult: dTransform('Bankai', 'BANKAI', 'Releases Tensa Zangetsu — crushing spirit pressure and blinding speed.', 'god', '#6a5cff', 'reiatsu', 600),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', counterSpec: 'dspec', ultRange: 480 } }),
 
@@ -590,7 +644,7 @@ mk({ id: 'naruto', name: 'Naruto Uzumaki', anime: 'Naruto', title: 'The Seventh 
       { cd: 138, grav: 0, vel: [[0, 0, 0], [6, 22, -1], [17, 2, null]], vfx: 'rasengan', desc: 'Charges forward driving a spiralling sphere of raw chakra.' }),
     dspec: mv('Substitution Jutsu', 'counter', 38, 2, [], { cd: 150, counter: [2, 22], invuln: [2, 22], vfx: 'cloneEcho', desc: 'Swaps with a log and retaliates from behind with a clone assist.',
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); g.fx.burst(f.x, f.y - 30, 14, '#c8a064', 6, 'shard', 24, 7); f.x = a.x - a.facing * 54; f.y = a.y; f.facing = a.x > f.x ? 1 : -1; f.invuln = 18; g.flashScreen('#ffb52e', 0.3); g.applyHit(f, a, { dmg: 13.5, ang: 42, kb: 7.2, sc: 8.2, fx: 'blunt' }, f.facing, a.x, a.y - 42); f.moveFrame = 26; } }),
-    ult: uTransform('Kurama Link Mode', 'KURAMA LINK MODE', 'Wraps himself in Nine-Tails chakra for overwhelming speed and power.', 'god', '#ffb52e', 'cloneEcho', 620),
+    ult: dTransform('Kurama Link Mode', 'KURAMA LINK MODE', 'Wraps himself in Nine-Tails chakra for overwhelming speed and power.', 'god', '#ffb52e', 'cloneEcho', 620),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', counterSpec: 'dspec', ultRange: 560 } }),
 
@@ -631,7 +685,7 @@ mk({ id: 'tanjiro', name: 'Tanjiro Kamado', anime: 'Demon Slayer', title: 'Water
     dspec: mv('Eleventh Form: Dead Calm', 'counter', 38, 2, [], { cd: 162, counter: [2, 24], invuln: [2, 24], vfx: 'waterRipple', desc: 'Absolute stillness — parries anything, including projectiles, and answers instantly.',
       onFrame: (f: any, fr: number, g: any) => { if (fr < 24) for (const p of g.projectiles) { if (p.owner !== f && p.reflectable !== false && Math.abs(p.x - f.x) < 92 + p.w / 2 && Math.abs(p.y - (f.y - 44)) < 84 + p.h / 2) { p.owner = f; p.vx = -p.vx * 1.3 || f.facing * 11; p.dir = Math.sign(p.vx) || f.facing; p.hitMap = new Map(); g.fx.ring(f.x + f.facing * 28, f.y - 44, 10, 62, '#c9f0ff', 14, 6); sfx('counter'); } } },
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); f.facing = a.x > f.x ? 1 : -1; f.invuln = 18; g.fx.slash(f.x, f.y - 44, 72, -1.6, 1.5, f.facing, '#8fdcff', 26, 16); g.applyHit(f, a, { dmg: 15, ang: 42, kb: 7.4, sc: 8.4, fx: 'slash' }, f.facing, a.x, a.y - 42); f.moveFrame = 26; } }),
-    ult: uDragon('Hinokami Kagura', 'HINOKAMI KAGURA', 'Dances the Sun Breathing kagura, releasing a blazing solar dragon.', '#ff7a1a', 'fire', 'sunDance'),
+    ult: dDragon('Hinokami Kagura', 'HINOKAMI KAGURA', 'Dances the Sun Breathing kagura, releasing a blazing solar dragon.', '#ff7a1a', 'fire', 'sunDance'),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', counterSpec: 'dspec', ultRange: 640 } }),
 
@@ -671,7 +725,7 @@ mk({ id: 'sasuke', name: 'Sasuke Uchiha', anime: 'Naruto', title: 'The Last Uchi
       { cd: 138, grav: 0, invuln: [6, 15], vel: [[0, 0, 0], [6, 27, 0], [17, 2, null]], vfx: 'chidori', desc: 'A blinding violet lightning charge that pierces straight through.' }),
     dspec: mv('Kirin', 'castUp', 34, 10, [], { cd: 198, vfx: 'chidori', desc: 'Drags a pillar of heavenly lightning down onto the nearest enemy.',
       onFrame: (f: any, fr: number, g: any) => { if (fr === 10) { const t = g.nearestEnemy(f, 600); const tx = t ? t.x + t.vx * 8 : f.x + f.facing * 240; g.spawnProj({ owner: f, type: 'bolt', x: tx, y: (t ? t.y : f.y) - 150, vx: 0, vy: 0, w: 78, h: 360, life: 34, delay: 16, dmg: 15, ang: 80, kb: 6.4, sc: 7.6, stun: 12, fx: 'elec', dir: f.facing }); } } }),
-    ult: uSummon('Susanoo: Indra', 'SUSANOO: INDRA', 'Manifests his complete Susanoo and brings its blade down on everything.'),
+    ult: dSummon('Susanoo: Indra', 'SUSANOO: INDRA', 'Manifests his complete Susanoo and brings its blade down on everything.'),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 660 } }),
 
@@ -711,7 +765,7 @@ mk({ id: 'luffy', name: 'Monkey D. Luffy', anime: 'One Piece', title: 'Future Pi
       { cd: 188, grav: 0.3, trail: 'hand', vfx: 'gatling', desc: 'An endless barrage of rubber fists filling the space in front of him.' }),
     dspec: mv('Gum-Gum Elephant Gun', 'slam', 46, 15, [H(15, 24, 58, -26, 200, 96, 17, 60, 7.4, 9.2, { fx: 'blunt' })],
       { cd: 202, vfx: 'hardenCrack', desc: 'A titanic armament-hardened fist that craters the entire ground.' }),
-    ult: uTransform('Gear Fourth', 'GEAR FOURTH', 'Inflates into Boundman — rocket-powered rubber with monstrous reach.', 'god', '#ff6a4a', 'rubberStretch', 600),
+    ult: dTransform('Gear Fourth', 'GEAR FOURTH', 'Inflates into Boundman — rocket-powered rubber with monstrous reach.', 'god', '#ff6a4a', 'rubberStretch', 600),
   },
   ai: { horizSpec: 'nspec', zoneSpec: 'dspec', ultRange: 460 } }),
 
@@ -752,7 +806,7 @@ mk({ id: 'zoro', name: 'Roronoa Zoro', anime: 'One Piece', title: 'Three-Sword S
       { cd: 145, grav: 0, vel: [[0, 0, 0], [7, 24, 0], [18, 2, null]], vfx: 'triCut', desc: 'A three-sword blitz that carves clean through everything ahead.' }),
     dspec: mv('Purgatory Onigiri', 'slam', 48, 15, [H(15, 24, 48, -22, 200, 74, 16.5, 62, 7.2, 9.0, { fx: 'slash' })],
       { cd: 200, vfx: 'hardenCrack', desc: 'Drives all three blades into the earth, shattering the ground apart.' }),
-    ult: uBeam('Asura: Nine Swords', 'ASURA — NINE SWORDS', 'Manifests nine blades and unleashes an unstoppable demonic slash storm.', '#8dffbe', 'slash', 'wind', 'windCross'),
+    ult: dBeam('Asura: Nine Swords', 'ASURA — NINE SWORDS', 'Manifests nine blades and unleashes an unstoppable demonic slash storm.', '#8dffbe', 'slash', 'wind', 'windCross'),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 640 } }),
 
@@ -792,7 +846,7 @@ mk({ id: 'saitama', name: 'Saitama', anime: 'One-Punch Man', title: 'The Caped B
       { cd: 158, grav: 0, invuln: [8, 18], vel: [[0, 0, 0], [8, 29, 0], [21, 2, null]], vfx: 'airPressure', desc: 'Crosses the whole arena in one step and arrives fist-first.' }),
     dspec: mv('Serious Stomp', 'slam', 48, 15, [H(15, 24, 46, -22, 214, 76, 19, 62, 7.8, 9.6, { fx: 'blunt' })],
       { cd: 205, vfx: 'hardenCrack', desc: 'A casual stomp that fractures the entire stage in one go.' }),
-    ult: uMeteor('Serious Punch', 'SERIOUS SERIES: SERIOUS PUNCH', 'Throws one genuinely serious punch. The shockwave does the rest.', '#ffe58a', 'blunt', 'seriousWind'),
+    ult: dMeteor('Serious Punch', 'SERIOUS SERIES: SERIOUS PUNCH', 'Throws one genuinely serious punch. The shockwave does the rest.', '#ffe58a', 'blunt', 'seriousWind'),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 340 } }),
 
@@ -833,7 +887,7 @@ mk({ id: 'gojo', name: 'Satoru Gojo', anime: 'Jujutsu Kaisen', title: 'The Stron
     dspec: mv('Infinity', 'counter', 40, 2, [], { cd: 168, counter: [2, 26], invuln: [2, 26], vfx: 'limitless', desc: 'Nothing can reach him — negates any attack or projectile and answers instantly.',
       onFrame: (f: any, fr: number, g: any) => { if (fr < 26) for (const p of g.projectiles) { if (p.owner !== f && p.reflectable !== false && Math.abs(p.x - f.x) < 100 + p.w / 2 && Math.abs(p.y - (f.y - 44)) < 90 + p.h / 2) { p.owner = f; p.vx = -p.vx * 1.4 || f.facing * 12; p.dir = Math.sign(p.vx) || f.facing; p.hitMap = new Map(); p.dmg *= 1.3; g.fx.ring(f.x + f.facing * 30, f.y - 44, 10, 70, '#5fd2ff', 16, 6); sfx('counter'); } } },
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); g.flashScreen('#5fd2ff', 0.34); f.facing = a.x > f.x ? 1 : -1; f.invuln = 22; g.fx.ring(f.x, f.y - 44, 12, 110, '#c9a8ff', 20, 9); g.applyHit(f, a, { dmg: 15.5, ang: 42, kb: 7.6, sc: 8.6, fx: 'purple' }, f.facing, a.x, a.y - 42); f.moveFrame = 28; } }),
-    ult: uBeam('Hollow Purple', 'HOLLOW TECHNIQUE: PURPLE', 'Collides Blue and Red into an imaginary mass that erases all it touches.', '#b067ff', 'purple', 'void', 'hollowPurple'),
+    ult: dBeam('Hollow Purple', 'HOLLOW TECHNIQUE: PURPLE', 'Collides Blue and Red into an imaginary mass that erases all it touches.', '#b067ff', 'purple', 'void', 'hollowPurple'),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', counterSpec: 'dspec', ultRange: 700 } }),
 
@@ -873,7 +927,7 @@ mk({ id: 'yuji', name: 'Yuji Itadori', anime: 'Jujutsu Kaisen', title: "Sukuna's
       { cd: 140, grav: 0.3, vel: [[0, 0, 0], [6, 18, -8], [17, 3, null]], trail: 'foot', vfx: 'cursedFist', desc: 'A soaring reverse kick that carries both fighters into the air.' }),
     dspec: mv('Divergent Guard', 'counter', 38, 2, [], { cd: 158, counter: [2, 22], invuln: [2, 22], vfx: 'cursedFist', desc: 'Eats the hit, then returns it twice — an instant blow and a delayed one.',
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); f.facing = a.x > f.x ? 1 : -1; f.invuln = 18; g.flashScreen('#ff5f8a', 0.3); g.applyHit(f, a, { dmg: 10, ang: 42, kb: 5.4, sc: 6.4, fx: 'blunt' }, f.facing, a.x, a.y - 42); const tgt = a; setTimeout(() => { try { if (tgt.alive) g.applyHit(f, tgt, { dmg: 8, ang: 46, kb: 6.6, sc: 7.6, fx: 'dark' }, f.facing, tgt.x, tgt.y - 42); } catch { /* ignore */ } }, 260); f.moveFrame = 26; } }),
-    ult: uTransform("Sukuna's Vessel", 'SUKUNA AWAKENS', 'The King of Curses surfaces — markings blaze and every strike turns lethal.', 'devil', '#ff2a4a', 'blackFlash', 620),
+    ult: dTransform("Sukuna's Vessel", 'SUKUNA AWAKENS', 'The King of Curses surfaces — markings blaze and every strike turns lethal.', 'devil', '#ff2a4a', 'blackFlash', 620),
   },
   ai: { horizSpec: 'nspec', counterSpec: 'dspec', ultRange: 380 } }),
 
@@ -913,7 +967,7 @@ mk({ id: 'deku', name: 'Izuku Midoriya', anime: 'My Hero Academia', title: 'One 
       { cd: 132, grav: 0, vel: [[0, 0, 0], [5, 26, -1], [17, 2, null]], trail: 'foot', vfx: 'cowlSpark', desc: 'Green lightning propels a blistering running kick barrage.' }),
     dspec: mv('Manchester Smash', 'flip', 36, 6, [H(6, 16, 26, -62, 80, 104, 12, 82, 6.2, 7.4, { fx: 'elec' })],
       { cd: 168, grav: 0.5, vel: [[6, 2, -17]], trail: 'foot', vfx: 'smashShock', desc: 'Flips into a rising axe-kick wreathed in One For All.' }),
-    ult: uTransform('One For All: 100%', 'ONE FOR ALL — 100%', 'Pushes the quirk to its absolute limit. His body screams; everything breaks.', 'god', '#8dffb0', 'cowlSpark', 560),
+    ult: dTransform('One For All: 100%', 'ONE FOR ALL — 100%', 'Pushes the quirk to its absolute limit. His body screams; everything breaks.', 'god', '#8dffb0', 'cowlSpark', 560),
   },
   ai: { vertSpec: 'dspec', horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 520 } }),
 
@@ -953,7 +1007,7 @@ mk({ id: 'todoroki', name: 'Shoto Todoroki', anime: 'My Hero Academia', title: '
       { cd: 148, grav: 0, vel: [[0, 0, 0], [7, 23, 0], [18, 2, null]], vfx: 'flashfire', desc: 'Ignites his left side and charges through with searing heat.' }),
     dspec: mv('Heaven-Piercing Ice', 'slam', 46, 14, [H(14, 24, 40, -40, 190, 130, 15, 72, 7.2, 8.8, { fx: 'elec' })],
       { cd: 196, vfx: 'iceSpires', desc: 'Freezes the ground and detonates an enormous glacier around himself.' }),
-    ult: uBeam('Flashfire Inferno', 'FLASHFIRE INFERNO', 'Unleashes both quirks at once in a roaring column of fire and frost.', '#ff9a3a', 'fire', 'fire', 'flashfire'),
+    ult: dBeam('Flashfire Inferno', 'FLASHFIRE INFERNO', 'Unleashes both quirks at once in a roaring column of fire and frost.', '#ff9a3a', 'fire', 'fire', 'flashfire'),
   },
   ai: { zoneSpec: 'nspec', horizSpec: 'sspec', ultRange: 700 } }),
 
@@ -993,7 +1047,7 @@ mk({ id: 'eren', name: 'Eren Yeager', anime: 'Attack on Titan', title: 'The Atta
       { cd: 152, grav: 0, invuln: [7, 18], vel: [[0, 0, 0], [7, 25, 0], [20, 2, null]], vfx: 'steamBurst', desc: 'Barrels forward shoulder-first with unstoppable momentum.' }),
     dspec: mv('Hardened Guard', 'counter', 38, 2, [], { cd: 162, counter: [2, 24], invuln: [2, 24], vfx: 'steamBurst', desc: 'Crystallised skin eats the blow, then answers with a haymaker.',
       onCounter: (f: any, a: any, g: any) => { sfx('counter'); f.facing = a.x > f.x ? 1 : -1; f.invuln = 20; g.flashScreen('#ffd9a0', 0.3); g.fx.impact(a.x, a.y - 42, 96, '#ffd9a0'); g.applyHit(f, a, { dmg: 15.5, ang: 42, kb: 7.6, sc: 8.6, fx: 'blunt' }, f.facing, a.x, a.y - 42); f.moveFrame = 26; } }),
-    ult: uMeteor('Attack Titan Rampage', 'THE ATTACK TITAN', 'Transforms in a pillar of lightning and crashes down with titanic force.', '#ffd9a0', 'blunt', 'steamBurst'),
+    ult: dMeteor('Attack Titan Rampage', 'THE ATTACK TITAN', 'Transforms in a pillar of lightning and crashes down with titanic force.', '#ffd9a0', 'blunt', 'steamBurst'),
   },
   ai: { horizSpec: 'sspec', counterSpec: 'dspec', ultRange: 360 } }),
 
@@ -1033,30 +1087,32 @@ mk({ id: 'denji', name: 'Denji', anime: 'Chainsaw Man', title: 'The Chainsaw Dev
       { cd: 142, grav: 0, vel: [[0, 0, 0], [6, 22, 0], [25, 2, null]], vfx: 'sawGrind', desc: 'Revs to maximum and tears straight through whatever is in the way.' }),
     dspec: mv('Ground Massacre', 'slam', 46, 14, MULTI(14, 30, 46, -22, 190, 74, 2.6, 12, 62, 7.2, 9.0, 'dark', 3),
       { cd: 194, vfx: 'bloodSpray', desc: 'Drives both saws into the earth, spraying debris and blood everywhere.' }),
-    ult: uTransform('Chainsaw Devil', 'CHAINSAW DEVIL', 'Pulls the cord — full devil form with monstrous reach and grinding power.', 'devil', '#ff3a3a', 'bloodSpray', 640),
+    ult: dTransform('Chainsaw Devil', 'CHAINSAW DEVIL', 'Pulls the cord — full devil form with monstrous reach and grinding power.', 'devil', '#ff3a3a', 'bloodSpray', 640),
   },
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 380 } }),
 ];
 
-CHARACTERS.push(SUKUNA, SHADOW_DIO, GOKU_BLACK);
+CHARACTERS.push(SUKUNA, SHADOW_DIO, GOKU_BLACK, GOKU_UI);
 applySignatures(CHARACTERS);
 for (const c of CHARACTERS) {
   if (c.id !== 'sukuna' && c.id !== 'gojo') continue;
   installBossKit(c.id, c.look, c.moves);
   const m = c.moves;
   c.abilities = [
-    { key: 'K · Neutral', name: m.nspec.name!, desc: m.nspec.desc! },
-    { key: 'Side + K', name: m.sspec.name!, desc: m.sspec.desc! },
-    { key: 'Down + K', name: m.dspec.name!, desc: m.dspec.desc! },
-    { key: 'Air + K', name: m.aspec!.name!, desc: m.aspec!.desc! },
-    { key: 'J → J → L', name: m.boss_finisher!.name!, desc: 'Combo exclusive. Both neutral heavy strikes must connect before the next input.' },
-    { key: 'R · ULTIMATE', name: m.ult.name!, desc: m.ult.desc! },
+    { key: 'L · Neutral', name: m.nspec.name!, desc: m.nspec.desc! },
+    { key: 'Side + L', name: m.sspec.name!, desc: m.sspec.desc! },
+    { key: 'Down + L', name: m.dspec.name!, desc: m.dspec.desc! },
+    { key: 'Air + L', name: m.aspec!.name!, desc: m.aspec!.desc! },
+    { key: 'R · Awaken (full gauge)', name: m.naw.name!, desc: `${m.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+    { key: 'AWAKENED · J · Light', name: m.nwl.name!, desc: m.nwl.desc! },
+    { key: 'AWAKENED · K · Heavy', name: m.nwh.name!, desc: m.nwh.desc! },
+    { key: 'AWAKENED · L · Finisher', name: m.boss_finisher!.name!, desc: m.boss_finisher!.desc! },
   ];
   c.moveBranches = [
-    { input: 'H → H → H', name: m.nlight3.name!, desc: 'Tap and release each key during the follow-up window. Neutral stance.' },
-    { input: 'H → K / J', name: 'Technique or launcher', desc: m.nlight_spec.name + ' / ' + m.nlight_heavy.name },
-    { input: 'J → J → L', name: m.boss_finisher!.name!, desc: 'Land the first heavy, tap Heavy again, land the second, then tap Limit. Watch the Combo Coach.' },
-    { input: 'U → K', name: 'Awakened techniques', desc: 'Neutral, side, down and air each have a different starter and follow-up.' },
+    { input: 'J → J → J', name: m.nlight3.name!, desc: 'Tap and release each key during the follow-up window. Neutral stance.' },
+    { input: 'J → L / K', name: 'Technique or launcher', desc: m.nlight_spec.name + ' / ' + m.nlight_heavy.name },
+    { input: 'K → K → L', name: m.boss_finisher!.name!, desc: 'Land the first heavy, tap Heavy again, land the second, then tap L while AWAKENED. Watch the Combo Coach.' },
+    { input: 'R, then J / K / L', name: 'The awakened kit', desc: 'Spend a full gauge to Awaken. Every attack button becomes a different move until the gauge runs out.' },
   ];
   if (c.id === 'gojo') c.passives = [{ name: 'Six Eyes', desc: 'Neutral Awaken briefly accelerates movement and cooldown recovery. Blue pulls and Red repels; Void controls a bounded area.' }];
 }

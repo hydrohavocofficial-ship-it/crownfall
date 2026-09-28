@@ -17,8 +17,20 @@ interface Beam { x: number; y: number; ang: number; life: number; max: number; c
 interface Cut { x: number; y: number; len: number; ang: number; life: number; max: number; delay: number; thick: number; seed: number; }
 interface Arc extends Cut { curve: number; }
 interface Impact { x: number; y: number; r: number; life: number; max: number; color: string; seed: number; }
+/** Dual-pass additive blast: a white-hot core inside a coloured corona. */
+interface Bloom { x: number; y: number; r: number; life: number; max: number; color: string; grow: number; }
+/** Chromatic impact shockwave: red/cyan channel copies sliding apart. */
+interface Shock { x: number; y: number; r: number; life: number; max: number; color: string; spin: number; }
+/** Manga action calligraphy: angled, outlined, spring-bounced impact word. */
+interface Calli { x: number; y: number; text: string; life: number; max: number; color: string; size: number; ang: number; seed: number; }
 
 const MAXP = 420;
+/** `#rrggbb` (or any css colour) to rgba with a clamped alpha. */
+function hexA2(color: string, a: number) {
+  if (!color || color[0] !== '#' || color.length < 7) return color;
+  const n = parseInt(color.slice(1, 7), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, a))})`;
+}
 interface Geometry { bounds: Rect; kind: BossVfxKind | TechniqueVisualStyle; boss: boolean; color: string; color2: string; life: number; max: number; options: BossVfxOptions; }
 
 // Sparse line-work fills the true hit volume. Each style has a distinct silhouette.
@@ -84,6 +96,9 @@ export class Effects {
   texts: Txt[] = [];
   beams: Beam[] = [];
   impacts: Impact[] = [];
+  blooms: Bloom[] = [];
+  shocks: Shock[] = [];
+  callis: Calli[] = [];
 
   shape(kind: BossVfxKind, bounds: Rect, life = 8, options: BossVfxOptions = {}) {
     if (this.geometry.length >= 64) this.geometry.shift();
@@ -97,6 +112,36 @@ export class Effects {
   impact(x: number, y: number, r: number, color: string) {
     if (this.impacts.length >= 28) this.impacts.shift();
     this.impacts.push({ x, y, r, color, life: 13, max: 13, seed: Math.random() * 10 });
+  }
+
+  /**
+   * ADDITIVE ENERGY BLOOM — the two-pass blast every energy sphere in the game
+   * now uses. Pass one is a saturated corona, pass two a blown-out white core
+   * sitting inside it. A single flat fill always reads as a flat disc; the
+   * nested white core is what makes it read as *radiating*.
+   */
+  bloom(x: number, y: number, r: number, color: string, life = 16, grow = 1.6) {
+    if (this.blooms.length >= 26) this.blooms.shift();
+    this.blooms.push({ x, y, r, life, max: life, color, grow });
+  }
+
+  /** CHROMATIC SHOCKWAVE — red/cyan copies of one ring sliding apart. */
+  shock(x: number, y: number, r: number, color: string, life = 18) {
+    if (this.shocks.length >= 18) this.shocks.shift();
+    this.shocks.push({ x, y, r, life, max: life, color, spin: (Math.random() - 0.5) * 1.6 });
+  }
+
+  /**
+   * MANGA ACTION CALLIGRAPHY. Impact words drawn in angled 3D perspective with
+   * a heavy black outline, a drop plate behind the glyphs and an overshoot
+   * spring so the word slams into the panel and settles.
+   */
+  word(x: number, y: number, text: string, color = '#ffffff', size = 40, life = 34) {
+    if (this.callis.length >= 8) this.callis.shift();
+    this.callis.push({
+      x, y, text, color, size, life, max: life,
+      ang: (Math.random() - 0.5) * 0.34 - 0.12, seed: Math.random() * 10,
+    });
   }
 
   add(p: Partial<Particle> & { x: number; y: number }) {
@@ -157,6 +202,15 @@ export class Effects {
     this.beams.push({ x, y, ang, color, life: 45, max: 45 });
   }
 
+  /** Drops every live effect. Used to hand a clean frame back after a replay. */
+  clear() {
+    this.geometry.length = 0; this.parts.length = 0; this.slashes.length = 0;
+    this.cuts.length = 0; this.arcs.length = 0; this.swings.length = 0;
+    this.rings.length = 0; this.bolts.length = 0; this.texts.length = 0;
+    this.beams.length = 0; this.impacts.length = 0; this.blooms.length = 0;
+    this.shocks.length = 0; this.callis.length = 0;
+  }
+
   update() {
     this.geometry.forEach(s => s.life--); this.geometry = this.geometry.filter(s => s.life > 0);
     for (const p of this.parts) {
@@ -174,6 +228,9 @@ export class Effects {
     this.texts.forEach((s) => { s.life--; s.y -= 0.8; }); this.texts = this.texts.filter((s) => s.life > 0);
     this.beams.forEach((s) => s.life--); this.beams = this.beams.filter((s) => s.life > 0);
     this.impacts.forEach((s) => s.life--); this.impacts = this.impacts.filter((s) => s.life > 0);
+    this.blooms.forEach((s) => { s.life--; s.r += s.grow; }); this.blooms = this.blooms.filter((s) => s.life > 0);
+    this.shocks.forEach((s) => s.life--); this.shocks = this.shocks.filter((s) => s.life > 0);
+    this.callis.forEach((s) => { s.life--; s.y -= 0.55; }); this.callis = this.callis.filter((s) => s.life > 0);
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -181,6 +238,49 @@ export class Effects {
       if (s.boss) drawBossVfx(ctx, s.kind as BossVfxKind, s.bounds, s.max - s.life, { ...s.options, alpha: (s.options.alpha ?? 1) * Math.min(1, s.life / 3) });
       else drawStrike(ctx, s);
     }
+    // ---- chromatic impact shockwaves (red/cyan channel split) -------------
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of this.shocks) {
+      const t = 1 - s.life / s.max, k = s.life / s.max;
+      const r = Math.max(1, s.r * (0.2 + t * 1.5));
+      const off = 2 + t * 16;
+      ctx.lineWidth = 5 * k + 1;
+      // Red copy and cyan copy, displaced along a fixed diagonal: the visual
+      // equivalent of splitting an RGB fringe on a camera.
+      ctx.strokeStyle = '#ff2b2b';
+      ctx.beginPath(); ctx.arc(s.x - off, s.y + off * 0.5, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#22e0ff';
+      ctx.beginPath(); ctx.arc(s.x + off, s.y - off * 0.5, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = k * 0.9;
+      ctx.strokeStyle = s.color; ctx.lineWidth = 3 * k + 0.6;
+      ctx.beginPath(); ctx.arc(s.x, s.y, r * 0.94, s.spin, s.spin + Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    // ---- dual-pass additive energy bloom -----------------------------------
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of this.blooms) {
+      const k = s.life / s.max, r = Math.max(1, s.r);
+      const fade = k * k;
+      // Pass 1: saturated corona.
+      const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+      g.addColorStop(0, hexA2(s.color, 0.5 * fade));
+      g.addColorStop(0.42, hexA2(s.color, 0.28 * fade));
+      g.addColorStop(1, hexA2(s.color, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill();
+      // Pass 2: white-hot core, no wider than a third of the corona.
+      const cr = Math.max(0.5, r * 0.34);
+      const c = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, cr);
+      c.addColorStop(0, `rgba(255,255,255,${0.92 * fade})`);
+      c.addColorStop(0.5, `rgba(255,255,255,${0.34 * fade})`);
+      c.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = c;
+      ctx.beginPath(); ctx.arc(s.x, s.y, cr, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
     // beams (KO)
     for (const b of this.beams) {
       const t = b.life / b.max;
@@ -198,7 +298,11 @@ export class Effects {
     // manga impact stars (normal blend, drawn under additive layer)
     for (const im of this.impacts) {
       const t = im.life / im.max, k = 1 - t;
-      const R = im.r * (0.45 + k * 0.85);
+      // The star punches fast and stays small. Left to swell past its requested
+      // radius it covers more screen than the fighter it is attached to, and at
+      // that size a hard white core stops reading as a flash of light and starts
+      // reading as a sticker pasted over the fight.
+      const R = Math.min(im.r * (0.4 + k * 0.6), im.r * 0.88);
       ctx.save(); ctx.translate(im.x, im.y); ctx.rotate(im.seed);
       ctx.globalAlpha = Math.min(1, t * 1.6);
       const spikes = 11;
@@ -213,8 +317,14 @@ export class Effects {
         ctx.closePath();
       };
       shape(1); ctx.fillStyle = '#0d0d14'; ctx.fill();
-      shape(0.92); ctx.fillStyle = im.color; ctx.fill();
-      shape(0.55); ctx.fillStyle = '#ffffff'; ctx.fill();
+      shape(0.9); ctx.fillStyle = im.color; ctx.fill();
+      // The hot centre is a falloff, not a disc. A flat white circle is the
+      // single thing that makes an impact decal look like clip art.
+      const core = ctx.createRadialGradient(0, 0, 0, 0, 0, R * 0.5);
+      core.addColorStop(0, 'rgba(255,255,255,.95)');
+      core.addColorStop(.42, hexA2(im.color, .85));
+      core.addColorStop(1, hexA2(im.color, 0));
+      shape(0.54); ctx.fillStyle = core; ctx.fill();
       ctx.restore();
     }
     for (const s of this.swings) drawSwing(ctx, s);
@@ -276,6 +386,71 @@ export class Effects {
       ctx.font = `italic 900 ${t.size}px Bangers, Impact, sans-serif`;
       ctx.lineWidth = 5; ctx.strokeStyle = '#000'; ctx.strokeText(t.text, t.x, t.y);
       ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y);
+    }
+    ctx.restore();
+    this.drawCalligraphy(ctx);
+  }
+
+  /**
+   * Manga action calligraphy. Each word is drawn as four stacked passes:
+   *   1. a sheared "extruded" back plate that gives the 3D read,
+   *   2. a heavy black outline (stroke),
+   *   3. a saturated fill,
+   *   4. a white inner highlight along the top edge.
+   *
+   * The transform squashes vertically and shears horizontally, which is a cheap
+   * perspective approximation: a word drawn this way looks like it is standing
+   * off the page rather than lying flat on it. Scale runs on an overshoot
+   * spring, so it slams in past 100 % and settles back.
+   */
+  private drawCalligraphy(ctx: CanvasRenderingContext2D) {
+    if (!this.callis.length) return;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const c of this.callis) {
+      const t = 1 - c.life / c.max;
+      // Overshoot spring: fast attack, slight bounce, long hold, hard exit.
+      const inK = Math.min(1, t / 0.28);
+      const spring = 1 + 0.55 * Math.pow(1 - inK, 2) * Math.cos(inK * 12.5) * (1 - inK);
+      const pop = inK * spring;
+      const outK = t > 0.72 ? 1 - (t - 0.72) / 0.28 : 1;
+      const alpha = Math.max(0, Math.min(1, outK * 1.4));
+      if (alpha <= 0.02) continue;
+      const grow = pop * (1 + t * 0.16);
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(c.ang);
+      // The font has to be current before `measureText` or the highlight offset
+      // below is measured against the previous word's glyphs.
+      ctx.font = `italic 900 ${c.size}px Bangers, Impact, sans-serif`;
+      // A 3D-ish tilt: vertical squash for the perspective + a shear for the lean.
+      const sq = 0.52 + 0.1 * Math.sin(c.seed);
+      const sh = -0.34 + Math.sin(c.seed * 1.7) * 0.1;
+      const w = ctx.measureText(c.text).width * 0.1;
+      ctx.transform(grow, sh * 0.5 * grow, 0, grow * sq, 0, 0);
+      ctx.globalAlpha = alpha;
+      const depth = Math.max(2, c.size * 0.1);
+      // 1. extruded back plate
+      ctx.fillStyle = '#12060f';
+      for (let i = depth; i > 0; i -= 2) ctx.fillText(c.text, -i * 0.55, i);
+      // 2. heavy black outline
+      ctx.lineWidth = Math.max(4, c.size * 0.24);
+      ctx.strokeStyle = '#000';
+      ctx.strokeText(c.text, 0, 0);
+      // 3. saturated fill with a vertical gradient so the glyph has a face
+      const grad = ctx.createLinearGradient(0, -c.size * 0.5, 0, c.size * 0.5);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.34, c.color);
+      grad.addColorStop(1, hexA2(c.color, 0.62));
+      ctx.fillStyle = grad;
+      ctx.fillText(c.text, 0, 0);
+      // 4. thin inner highlight
+      ctx.lineWidth = Math.max(1, c.size * 0.045);
+      ctx.strokeStyle = `rgba(255,255,255,${0.75 * alpha})`;
+      ctx.strokeText(c.text, -w * 0.14, -c.size * 0.05);
+      ctx.restore();
     }
     ctx.restore();
   }

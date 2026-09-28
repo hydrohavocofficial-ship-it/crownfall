@@ -4,13 +4,12 @@ import { charById } from '../game/characters';
 import { DEFAULT_BINDINGS } from '../game/input';
 import { sfx } from '../game/audio';
 
-const ACTIONS: { id: PreviewAction; key: string; label: string }[] = [
-  { id: 'light', key: 'H', label: 'LIGHT' },
-  { id: 'heavy', key: 'J', label: 'HEAVY' },
-  { id: 'special', key: 'K', label: 'SPECIAL' },
-  { id: 'limit', key: 'L', label: 'LIMIT' },
-  { id: 'awaken', key: 'U', label: 'AWAKEN' },
-  { id: 'ult', key: 'R', label: 'ULT' },
+const ACTIONS: { id: PreviewAction; key: string; label: string; color: string }[] = [
+  { id: 'light', key: 'J', label: 'LIGHT', color: '#8dffb0' },
+  { id: 'heavy', key: 'K', label: 'HEAVY', color: '#ffb52e' },
+  { id: 'special', key: 'L', label: 'SPECIAL', color: '#3fa9ff' },
+  { id: 'awaken', key: 'R', label: 'AWAKEN', color: '#b067ff' },
+  { id: 'awakened', key: 'J/K/L', label: 'AWAKENED', color: '#ffd24a' },
 ];
 const STANCES: { id: PreviewStance; label: string }[] = [
   { id: 'neutral', label: 'STAND' }, { id: 'side', label: 'FORWARD' }, { id: 'down', label: 'DOWN' }, { id: 'air', label: 'AERIAL' },
@@ -21,8 +20,7 @@ export default function Preview({ charId, color }: { charId: string; color: stri
   const gameRef = useRef<Game | null>(null);
   const autoRef = useRef(true);
   const [label, setLabel] = useState('INITIALISING LIVE SIMULATION');
-  const [action, setAction] = useState<PreviewAction>('awaken');
-  const [stance, setStance] = useState<PreviewStance>('neutral');
+  const [action, setAction] = useState<PreviewAction>('awaken');  const [stance, setStance] = useState<PreviewStance>('neutral');
   const [followup, setFollowup] = useState(true);
   const [auto, setAuto] = useState(true);
   const char = charById(charId);
@@ -39,15 +37,22 @@ export default function Preview({ charId, color }: { charId: string; color: stri
     const labelTimer = window.setInterval(() => setLabel(game.previewLabel()), 90);
 
     const counter = (['sspec', 'dspec', 'nspec'] as const).find((key) => char.moves[key].counter);
+    /**
+     * The showcase order is the order a player meets the character in: the base
+     * string, the signature, the transformation, and then the awakened kit. The
+     * awakened set-piece goes last because it is the longest thing in the game
+     * and it lands best after the player has seen everything else.
+     */
     const showcase: PreviewRequest[] = [
-      { action: 'awaken', stance: 'neutral', followup: true },
-      { action: 'limit', stance: 'side' },
       { action: 'light', stance: 'neutral' },
-      ...(counter ? [{ action: 'special' as PreviewAction, stance: (counter === 'dspec' ? 'down' : counter === 'sspec' ? 'side' : 'neutral') as PreviewStance }] : []),
       { action: 'special', stance: 'neutral' },
-      { action: 'awaken', stance: 'air', followup: true },
-      { action: 'limit', stance: 'down' },
-      { action: 'ult', stance: 'neutral' },
+      { action: 'awaken', stance: 'neutral', followup: true },
+      { action: 'awakened', stance: 'neutral' },
+      { action: 'heavy', stance: 'side' },
+      ...(counter ? [{ action: 'special' as PreviewAction, stance: (counter === 'dspec' ? 'down' : counter === 'sspec' ? 'side' : 'neutral') as PreviewStance }] : []),
+      { action: 'awakened', stance: 'side' },
+      { action: 'awakened', stance: 'down' },
+      { action: 'light', stance: 'air' },
     ];
     game.queuePreview(showcase[0]);
     let autoIndex = 1;
@@ -66,7 +71,6 @@ export default function Preview({ charId, color }: { charId: string; color: stri
   useEffect(() => {
     gameRef.current?.queuePreview({ action, stance, followup: (action === 'awaken' || action === 'heavy') && followup });
   }, [action, stance, followup, charId]);
-
   const play = (request: PreviewRequest) => {
     autoRef.current = false; setAuto(false);
     gameRef.current?.queuePreview(request);
@@ -84,11 +88,11 @@ export default function Preview({ charId, color }: { charId: string; color: stri
       </div>
 
       <div className="absolute inset-x-2 bottom-2 bg-black/82 border border-white/15 p-2 backdrop-blur-sm">
-        <div className="grid grid-cols-6 gap-1 mb-1.5">
+        <div className="grid grid-cols-5 gap-1 mb-1.5">
           {ACTIONS.map((item) => (
             <button key={item.id} onClick={() => { setAction(item.id); autoRef.current = false; setAuto(false); }}
               className={`cursor-pointer border px-1 py-1 text-[9px] font-black tracking-tight transition ${action === item.id ? 'text-black scale-[1.04]' : 'bg-white/5 border-white/15 text-white/70 hover:bg-white/15'}`}
-              style={action === item.id ? { background: item.id === 'limit' ? '#ffb52e' : item.id === 'awaken' ? '#b067ff' : color, borderColor: '#fff' } : undefined}>
+              style={action === item.id ? { background: item.color === '#3fa9ff' ? color : item.color, borderColor: '#fff' } : undefined}>
               <span className="block text-[11px] leading-none">{item.key}</span>{item.label}
             </button>
           ))}
@@ -104,11 +108,11 @@ export default function Preview({ charId, color }: { charId: string; color: stri
         <div className="flex items-center justify-between gap-2 text-[9px] font-bold tracking-wider">
           <button onClick={() => play({ action, stance, followup: (action === 'awaken' || action === 'heavy') && followup })} className="px-2 py-1 bg-[#44e07a] text-black cursor-pointer">▶ REPLAY</button>
           {(action === 'awaken' || action === 'heavy' && stance === 'neutral' && char.moves.boss_heavy2) && (
-            <button onClick={() => setFollowup((v) => !v)} className={`px-2 py-1 border cursor-pointer ${followup ? 'border-[#b067ff] bg-[#b067ff] text-white' : 'border-white/20 text-white/60'}`}>{action === 'awaken' ? 'U → K' : 'J → J → L'} {followup ? 'ON' : 'OFF'}</button>
+            <button onClick={() => setFollowup((v) => !v)} className={`px-2 py-1 border cursor-pointer ${followup ? 'border-[#b067ff] bg-[#b067ff] text-white' : 'border-white/20 text-white/60'}`}>{action === 'heavy' ? 'K → K' : 'R → L'} {followup ? 'ON' : 'OFF'}</button>
           )}
           <button onClick={() => { const next = !auto; autoRef.current = next; setAuto(next); }} className={`px-2 py-1 border cursor-pointer ${auto ? 'border-[#ffb52e] text-[#ffb52e]' : 'border-white/20 text-white/50'}`}>AUTO {auto ? 'ON' : 'OFF'}</button>
         </div>
-        <div className="mt-1 text-[8px] leading-tight text-white/45">Close moves auto-place the dummy in hit range. Counters stage a real incoming dummy attack or projectile.</div>
+        <div className="mt-1 text-[8px] leading-tight text-white/45">Close moves auto-place the dummy in hit range. AWAKENED shows the second kit you get for fifteen seconds once the gauge is spent; the set-piece is halved.</div>
       </div>
     </div>
   );

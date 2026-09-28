@@ -6,6 +6,20 @@
 export type SwingStyle = 'blade' | 'blade3' | 'water' | 'flame' | 'dark' | 'lightning' | 'impact' | 'ki' | 'saw' | 'ice' | 'rubber' | 'cursed' | 'steam' | 'susanoo' | 'infinity';
 export interface SwingProfile { style: SwingStyle; col: string; col2: string; }
 
+/**
+ * The canonical style list, in a stable order.
+ *
+ * Anything that has to *persist* a swing across frames (the KO replay buffer)
+ * stores the style as an index into this array rather than as a string, so the
+ * two can never drift apart.
+ */
+export const SWING_STYLE_NAMES: readonly SwingStyle[] = [
+  'blade', 'blade3', 'water', 'flame', 'dark', 'lightning', 'impact', 'ki', 'saw', 'ice', 'rubber', 'cursed', 'steam', 'susanoo', 'infinity',
+];
+
+/** Used when a reconstructed swing arrives with no profile of its own. */
+const FALLBACK_PROFILE: SwingProfile = { style: 'blade', col: '#ffffff', col2: '#ffffff' };
+
 export const SWING_PROFILES: Record<string, SwingProfile> = {
   levi: { style: 'blade', col: '#dfe8f0', col2: '#8fb6d6' },
   zoro: { style: 'blade3', col: '#eafff0', col2: '#2fbf5a' },
@@ -18,6 +32,10 @@ export const SWING_PROFILES: Record<string, SwingProfile> = {
   killua: { style: 'lightning', col: '#8fd8ff', col2: '#ffffff' },
   sasuke: { style: 'lightning', col: '#6fa8ff', col2: '#d6c2ff' },
   goku: { style: 'ki', col: '#ffd24a', col2: '#fff6c8' },
+  // Ultra Instinct is bare-fisted, so the swing has to be an energy arc rather
+  // than a weapon trail - the silhouette is the hand, not what is in it. 'ki'
+  // is the one clean crescent in the set; 'ice' renders as a hard comb.
+  goku_ui: { style: 'ki', col: '#e2e8f0', col2: '#93c5fd' },
   naruto: { style: 'ki', col: '#ff9a2a', col2: '#8fd8ff' },
   saitama: { style: 'impact', col: '#ffffff', col2: '#ffd84a' },
   deku: { style: 'lightning', col: '#3aff8a', col2: '#e4fff0' },
@@ -69,8 +87,14 @@ function jag(c: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2
   c.lineTo(x2, y2);
 }
 
-function speedLines(c: CanvasRenderingContext2D, r: number, k: number, col: string, n = 14) {
-  c.strokeStyle = col; c.lineCap = 'round';
+/** `#rrggbb` to rgba with a clamped alpha, for the additive passes. */
+function rgba(hex: string, a: number) {
+  if (!hex || hex[0] !== '#' || hex.length < 7) return hex;
+  const n = parseInt(hex.slice(1, 7), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, a))})`;
+}
+
+function speedLines(c: CanvasRenderingContext2D, r: number, k: number, col: string, n = 14) {  c.strokeStyle = col; c.lineCap = 'round';
   for (let i = 0; i < n; i++) {
     const a = i / n * TAU + (i % 3) * .13, r0 = r * (.35 + k * .6), r1 = r * (.75 + k * 1.1) + (i % 4) * 8;
     c.lineWidth = (i % 2 ? 1.5 : 3) * (1 - k); c.beginPath(); c.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); c.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); c.stroke();
@@ -78,7 +102,14 @@ function speedLines(c: CanvasRenderingContext2D, r: number, k: number, col: stri
 }
 
 export function drawSwing(c: CanvasRenderingContext2D, s: Swing) {
-  const k = 1 - s.life / s.max, { style, col, col2 } = s.p;
+  // The profile is the one field of a Swing that is not a number, and it is
+  // therefore the one that can be missing when an effect is reconstructed rather
+  // than spawned - a KO replay restoring footage is exactly that case. A missing
+  // profile degrades to a plain two-tone arc; it must never throw, because a
+  // throw inside the animation-frame callback silently kills the loop and the
+  // game hangs on its last frame with no way back.
+  const p = s.p || FALLBACK_PROFILE;
+  const k = 1 - s.life / s.max, { style, col, col2 } = p;
   const head = s.a0 + (s.a1 - s.a0) * easeOut(k / .45);
   const tail = s.a0 + (s.a1 - s.a0) * clamp((k - .25) / .75) * .9;
   const alpha = k < .6 ? 1 : 1 - (k - .6) / .4, r = s.r, w = r * .28 * s.thick;
@@ -147,6 +178,42 @@ export function drawSwing(c: CanvasRenderingContext2D, s: Swing) {
       }
       c.stroke(); c.strokeStyle = col; c.lineWidth = 5; c.globalAlpha *= .45; c.stroke();
       if (s.a0 === s.a1 && k < .4) { c.globalAlpha = 1 - k / .4; c.fillStyle = '#ffffff'; c.beginPath(); c.arc(0, 0, r * .3 * (1 - k), 0, TAU); c.fill(); }
+      break;
+    }
+    case 'ki': {
+      // Ultra Instinct: a crescent of focused ki, not a manga star.
+      //
+      // This used to fall through to the generic fist branch below, which draws
+      // sixteen radial speed lines around a sixteen-point white flash. Under
+      // `lighter`, sixteen near-white lines and a white core saturate into one
+      // solid wheel roughly as wide as the fighter wearing it - the hit stopped
+      // reading as a hit and started reading as a sticker over the pose. The
+      // energy read comes from one tapered arc and a handful of streaks off its
+      // leading edge, with the hot core small and gone almost immediately.
+      const R0 = r * .52;
+      c.globalCompositeOperation = 'lighter';
+      c.fillStyle = col2;
+      crescent(c, R0, tail, head, r * .17 * s.thick); c.fill();
+      c.fillStyle = col;
+      crescent(c, R0 * .95, tail, head, r * .06 * s.thick); c.fill();
+      // Four streaks, thrown forward off the leading edge rather than all round.
+      c.strokeStyle = col; c.lineCap = 'round';
+      for (let i = 0; i < 4; i++) {
+        const a = head - (head - tail) * (.1 + i * .18);
+        const r0 = R0 * .84, r1 = r0 + R0 * (.34 + k * .8) * (1 - i * .14);
+        c.lineWidth = (3 - i * .5) * (1 - k);
+        c.beginPath(); c.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); c.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); c.stroke();
+      }
+      // A small hot core at the point of contact, gone inside a third of the arc.
+      if (k < .3) {
+        const f = 1 - k / .3, rr = R0 * .42 * f;
+        const core = c.createRadialGradient(0, 0, 0, 0, 0, rr);
+        core.addColorStop(0, 'rgba(255,255,255,.8)');
+        core.addColorStop(.45, rgba(col2, .45 * f));
+        core.addColorStop(1, rgba(col2, 0));
+        c.fillStyle = core;
+        c.beginPath(); c.arc(0, 0, rr, 0, TAU); c.fill();
+      }
       break;
     }
     default: {

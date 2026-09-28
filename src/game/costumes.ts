@@ -207,7 +207,7 @@ export function drawCostume(c: CanvasRenderingContext2D, id: string, look: Look,
 }
 
 export function drawPresence(c: CanvasRenderingContext2D, id: string, look: Look, time: number, powered: boolean, attacking: boolean) {
-  const boss = id === 'sukuna' || id === 'gojo' || id === 'shadowdio' || id === 'gokublack';
+  const boss = id === 'sukuna' || id === 'gojo' || id === 'shadowdio' || id === 'gokublack' || id === 'goku_ui';
   if (!boss && !powered && !attacking) return;
   c.save(); c.globalAlpha *= powered ? .55 : attacking ? .32 : .17;
   c.strokeStyle = look.energy; c.lineWidth = 1.2;
@@ -252,6 +252,22 @@ export function drawPresence(c: CanvasRenderingContext2D, id: string, look: Look
       c.moveTo(lx, ly);
       c.lineTo(lx + (Math.sin(time + i) * 14), ly + (Math.cos(time + i) * 14));
       c.stroke();
+    }
+    c.globalAlpha = 1;
+  } else if (id === 'goku_ui') {
+    // Ultra Instinct Godly Presence: a slow, perfectly even ring of platinum
+    // stardust with a counter-rotating cyan shell — symmetrical on purpose, so
+    // the motion reads as a body that is not fighting its own momentum.
+    const pulse = Math.sin(time * 0.12) * 3;
+    for (let ring = 0; ring < 2; ring++) {
+      const spin = time * (ring ? -0.028 : 0.038);
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU + spin;
+        const r = 26 + ring * 12 + (i % 3) * 5 + pulse;
+        const fx = Math.cos(a) * r, fy = -44 + Math.sin(a) * (r + 13);
+        c.globalAlpha = (i % 2 ? 0.45 : 0.9) * (0.45 + Math.sin(a * 2) * 0.35);
+        disc(c, fx, fy, 1.5 + (i % 2) * 1.1, ring ? '#93c5fd' : i % 2 ? '#ffffff' : '#a5f3fc');
+      }
     }
     c.globalAlpha = 1;
   } else {

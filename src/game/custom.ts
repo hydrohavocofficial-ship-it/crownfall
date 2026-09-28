@@ -7,7 +7,9 @@ import { makePortrait } from './portraits';
 export interface CustomCfg {
   id: string; name: string; title: string; origin: string; bio: string; color: string;
   look: Look; bars: { power: number; speed: number; range: number; defense: number }; size: number;
-  style: string; nspec: string; sspec: string; dspec: string; ult: string;
+  style: string; nspec: string; sspec: string; dspec: string;
+  /** Which fighter's retained set-piece becomes the awakened special. */
+  domain: string;
 }
 
 const KEY = 'shonen-brawl-customs-v1';
@@ -42,14 +44,18 @@ export function buildCustom(cfg: CustomCfg): CharDef {
   core.nspec = baseById(cfg.nspec).moves.nspec;
   core.sspec = baseById(cfg.sspec).moves.sspec;
   core.dspec = baseById(cfg.dspec).moves.dspec;
-  core.ult = baseById(cfg.ult).moves.ult;
-  const moves = installTechniques(style.id, look, core) as Record<MoveKey, MoveDef>;
+  // The set-piece is borrowed, not scaled by the builder's own bars: a domain is
+  // already the biggest thing a character does, and letting a custom fighter
+  // stack its power budget on top of one would be a balance hole.
+  const dsrc = baseById(cfg.domain);
+  const domain = dsrc.domain || dsrc.moves.nfu;
+  const moves = installTechniques(style.id, look, core, domain) as Record<MoveKey, MoveDef>;
   // Boss-style normals reference optional combo nodes; copy the complete reachable kit.
   for (const key of ['boss_heavy2', 'boss_finisher', 'aspec', 'aig'] as const) {
     if (style.moves[key]) moves[key] = scaleMove(style.moves[key]!, dmgMul, reachMul);
   }
 
-  const nsrc = baseById(cfg.nspec), dsrc = baseById(cfg.dspec), usrc = baseById(cfg.ult);
+  const nsrc = baseById(cfg.nspec);
   return {
     id: cfg.id, styleId: style.id, name: cfg.name || 'Unnamed Fighter', anime: cfg.origin || 'Original Character', title: cfg.title || 'Custom Fighter',
     desc: cfg.bio || `A custom fighter using the ${style.name} fighting style.`,
@@ -59,23 +65,23 @@ export function buildCustom(cfg: CustomCfg): CharDef {
       speed: 5.8 + b.speed * 0.36, air: 5.6 + b.speed * 0.3, jump: 12.6 + b.speed * 0.34,
       weight: 0.82 + b.defense * 0.08, scale: cfg.size, gravity: 0.61,
     },
-    statBars: { ...b }, look, moves,
+    statBars: { ...b }, look, moves, domain,
     moveBranches: style.moveBranches,
     abilities: [
-      { key: 'K · Neutral Special', name: moves.nspec.name!, desc: moves.nspec.desc || '' },
-      { key: 'K · Side Special', name: moves.sspec.name!, desc: moves.sspec.desc || '' },
-      { key: 'K · Down Special', name: moves.dspec.name!, desc: moves.dspec.desc || '' },
-      { key: 'L · Limit Break', name: moves.nex.name!, desc: `${moves.nex.desc} Variants: ${moves.sex.name}, ${moves.dex.name}, ${moves.aex.name}.` },
-      { key: 'U · Awaken', name: moves.naw.name!, desc: `${moves.naw.desc} Variants: ${moves.saw.name}, ${moves.daw.name}, ${moves.aaw.name}.` },
-      { key: 'U → K · Awakened', name: moves.nfu.name!, desc: `${moves.nfu.desc} Follow-ups: ${moves.sfu.name}, ${moves.dfu.name}, ${moves.afu.name}.` },
-      { key: 'R · ULTIMATE', name: moves.ult.name!, desc: moves.ult.desc || '' },
+      { key: 'L · Neutral Special', name: moves.nspec.name!, desc: moves.nspec.desc || '' },
+      { key: 'L · Side Special', name: moves.sspec.name!, desc: moves.sspec.desc || '' },
+      { key: 'L · Down Special', name: moves.dspec.name!, desc: moves.dspec.desc || '' },
+      { key: 'R · Awaken (full gauge)', name: moves.naw.name!, desc: `${moves.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+      { key: 'AWAKENED · J · Light', name: moves.nwl.name!, desc: moves.nwl.desc || '' },
+      { key: 'AWAKENED · K · Heavy', name: moves.nwh.name!, desc: moves.nwh.desc || '' },
+      { key: 'AWAKENED · L · Special', name: moves.nfu.name!, desc: moves.nfu.desc || '' },
     ],
     ai: {
       horizSpec: 'sspec',
       zoneSpec: nsrc.ai.zoneSpec === 'nspec' ? 'nspec' : undefined,
-      vertSpec: dsrc.ai.vertSpec === 'dspec' ? 'dspec' : undefined,
+      vertSpec: 'dspec',
       counterSpec: moves.dspec.counter ? 'dspec' : undefined,
-      ultRange: usrc.ai.ultRange,
+      ultRange: style.ai.ultRange,
     },
   };
 }
@@ -113,6 +119,6 @@ export function newCustomCfg(): CustomCfg {
       energy: '#ff4fa3', energy2: '#ffd0ea', ninjaRun: true,
     },
     bars: { power: 4, speed: 4, range: 3, defense: 3 }, size: 0.95,
-    style: 'tanjiro', nspec: 'ichigo', sspec: 'sasuke', dspec: 'killua', ult: 'gojo',
+    style: 'tanjiro', nspec: 'ichigo', sspec: 'sasuke', dspec: 'killua', domain: 'gojo',
   };
 }

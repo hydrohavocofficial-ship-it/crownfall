@@ -9,7 +9,8 @@
 import { sfx } from './audio';
 import { makePortrait } from './portraits';
 import { installTechniques } from './techniques';
-import type { CharDef, CoreMoveKey, MoveKey } from './characters';
+import { mergeSignatures } from './abilities';
+import type { CharDef, CoreKit, MoveKey } from './characters';
 import type { AnimName, HitDef, MoveDef } from './types';
 import type { Look } from './render';
 
@@ -43,7 +44,7 @@ const look: Look = {
   build: { shoulder: 1.15, chest: 1.08, limb: 1.1, head: 1.0, torso: 1.1, hip: 1.0 },
 };
 
-const lights: Record<CoreMoveKey, MoveDef> = {
+const lights: CoreKit = {
   nlight: mv('Ki Blade Thrust', 'thrust', 20, 4, [H(4, 11, 48, -44, 82, 48, 4, 38, 2.4, 1.2, { fx: 'purple' })], { vfx: 'kiCut', chains: cN([4, 18]) }),
   nlight2: mv('God Split Slicer', 'slash', 22, 4, [H(4, 13, 52, -46, 88, 56, 3.8, 44, 2.2, 1.2, { fx: 'purple' })], { vfx: 'kiCut', chains: cN2([4, 19]) }),
   nlight3: mv('Divine Piercing Strike', 'spin', 30, 5, MULTI(5, 22, 54, -46, 96, 72, 2.2, 10, 44, 6.4, 7.4, 'purple', 3), { turns: 2, vfx: 'kiExplode' }),
@@ -82,7 +83,7 @@ const lights: Record<CoreMoveKey, MoveDef> = {
   dspec: mv('Holy Light Grenade', 'slam', 44, 12, MULTI(12, 28, 44, -20, 180, 72, 2.5, 11.5, 60, 7.0, 8.8, 'purple', 3),
     { cd: 190, vfx: 'kiExplode', desc: 'Calls down divine orbs of light that rupture the earth around him.' }),
   ult: {
-    name: 'Scythe of Sorrow', ult: 'SCYTHE OF SORROW',
+    name: 'Scythe of Sorrow',
     desc: 'Tears open the rift of sorrow with the giant Rosé Scythe, cleaving space and reality.',
     dur: 54, startup: 22, anim: 'castUp', invuln: [0, 42], grav: 0.2, vfx: 'kiExplode', cin: 46,
     hits: [H(22, 32, 0, -42, 340, 250, 12, 60, 7.4, 6.4, { fx: 'purple' })],
@@ -108,28 +109,31 @@ const lights: Record<CoreMoveKey, MoveDef> = {
   },
 };
 
-const generated = installTechniques('gokublack', look, lights) as Record<MoveKey, MoveDef>;
+// The Rosé Scythe is lifted out of the move table and handed to the technique
+// builder as the neutral awakened special's raw material.
+const merged = mergeSignatures('gokublack', lights);
+const SCYTHE = merged.domain!;
+const generated = installTechniques('gokublack', look, merged.moves, SCYTHE) as Record<MoveKey, MoveDef>;
 
 const branches = [
-  { input: 'H → H → H', name: `${generated.nlight.name} Chain`, desc: `${generated.nlight.name} → ${generated.nlight2.name} → ${generated.nlight3.name}.` },
-  { input: 'H → K', name: generated.nlight_spec.name!, desc: 'Cancels the light string into an Instant Slicer burst.' },
-  { input: 'H → J', name: generated.nlight_heavy.name!, desc: 'Launcher finisher that pops foes into juggle range.' },
-  { input: '→ H → H / K / J', name: generated.slight2.name!, desc: `${generated.slight.name} extends into ${generated.slight2.name}, ${generated.slight_spec.name} or ${generated.slight_heavy.name}.` },
-  { input: '↓ H → H / K', name: generated.dlight2.name!, desc: `${generated.dlight.name} extends into ${generated.dlight2.name} or ${generated.dlight_spec.name}.` },
-  { input: 'Air H → H / K', name: generated.nair2.name!, desc: `${generated.nair.name} chains into ${generated.nair2.name} or ${generated.nair_spec.name}.` },
-  { input: 'L · N / → / ↓ / Air', name: generated.nex.name!, desc: `Limit Break stances: ${generated.nex.name}, ${generated.sex.name}, ${generated.dex.name}, ${generated.aex.name}.` },
-  { input: 'U · N / → / ↓ / Air', name: generated.naw.name!, desc: `Awaken stances: ${generated.naw.name}, ${generated.saw.name}, ${generated.daw.name}, ${generated.aaw.name}.` },
-  { input: 'U → K', name: generated.nfu.name!, desc: `K immediately after U performs the awakened variant: ${generated.sfu.name}, ${generated.dfu.name}, ${generated.afu.name}.` },
+  { input: 'J → J → J', name: `${generated.nlight.name} Chain`, desc: `${generated.nlight.name} → ${generated.nlight2.name} → ${generated.nlight3.name}.` },
+  { input: 'J → L', name: generated.nlight_spec.name!, desc: 'Cancels the light string into an Instant Slicer burst.' },
+  { input: 'J → K', name: generated.nlight_heavy.name!, desc: 'Launcher finisher that pops foes into juggle range.' },
+  { input: '→ J → J / L / K', name: generated.slight2.name!, desc: `${generated.slight.name} extends into ${generated.slight2.name}, ${generated.slight_spec.name} or ${generated.slight_heavy.name}.` },
+  { input: '↓ J → J / L', name: generated.dlight2.name!, desc: `${generated.dlight.name} extends into ${generated.dlight2.name} or ${generated.dlight_spec.name}.` },
+  { input: 'Air J → J / L', name: generated.nair2.name!, desc: `${generated.nair.name} chains into ${generated.nair2.name} or ${generated.nair_spec.name}.` },
+  { input: 'R @ full gauge · N / → / ↓ / Air', name: generated.naw.name!, desc: `Spends the whole gauge to Awaken. Direction picks the transformation stance: ${generated.naw.name}, ${generated.saw.name}, ${generated.daw.name}, ${generated.aaw.name}.` },
+  { input: 'AWAKENED · J / K / L', name: `${generated.nwl.name} → ${generated.nwh.name} → ${generated.nfu.name}`, desc: 'A second kit for a second stance. The awakened special is the Rosé Scythe at half its old reach and half its old strength.' },
 ];
 
 const abilities = [
-  { key: 'K · Neutral Special', name: generated.nspec.name!, desc: generated.nspec.desc! },
-  { key: 'K · Side Special', name: generated.sspec.name!, desc: generated.sspec.desc! },
-  { key: 'K · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
-  { key: 'L · Limit Break', name: generated.nex.name!, desc: `${generated.nex.desc} Stances: ${generated.sex.name} / ${generated.dex.name} / ${generated.aex.name}.` },
-  { key: 'U · Awaken', name: generated.naw.name!, desc: `${generated.naw.desc} Stances: ${generated.saw.name} / ${generated.daw.name} / ${generated.aaw.name}.` },
-  { key: 'U → K · Awakened', name: generated.nfu.name!, desc: `${generated.nfu.desc} Follow-up variants: ${generated.sfu.name}, ${generated.dfu.name}, ${generated.afu.name}.` },
-  { key: 'R · ULTIMATE', name: generated.ult.name!, desc: generated.ult.desc! },
+  { key: 'L · Neutral Special', name: generated.nspec.name!, desc: generated.nspec.desc! },
+  { key: 'L · Side Special', name: generated.sspec.name!, desc: generated.sspec.desc! },
+  { key: 'L · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
+  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+  { key: 'AWAKENED · J · Light', name: generated.nwl.name!, desc: generated.nwl.desc! },
+  { key: 'AWAKENED · K · Heavy', name: generated.nwh.name!, desc: generated.nwh.desc! },
+  { key: 'AWAKENED · L · Scythe', name: generated.nfu.name!, desc: generated.nfu.desc! },
 ];
 
 export const GOKU_BLACK: CharDef = {
@@ -137,12 +141,12 @@ export const GOKU_BLACK: CharDef = {
   desc: 'The divine usurper wielding Super Saiyan Rosé. He carves through foes with an ethereal Ki blade, fires piercing Black Kamehameha beams, and tears reality open with the Scythe of Sorrow.',
   portrait: makePortrait('gokublack', look, ROSE_AURA),
   stats: { speed: 7.4, air: 7.6, jump: 14.0, weight: 1.0, scale: 1.02, gravity: 0.6 },
-  statBars: { power: 5, speed: 5, range: 4, defense: 4 }, look, moves: generated,
+  statBars: { power: 5, speed: 5, range: 4, defense: 4 }, look, moves: generated, domain: SCYTHE,
   moveBranches: branches, abilities,
   passives: [
     { name: 'Super Saiyan Rosé', desc: 'Godly ki enhances all blade and ki attacks with vibrant magenta cuts and accelerated frame recovery.' },
     { name: 'God Split Cut', desc: 'Ki manifests as a razor-sharp blade around the hand, granting superior horizontal disjoint and armor pierce.' },
-    { name: 'Scythe of Sorrow', desc: 'Ultimate rips open a dimensional tear, dealing devastating multi-hit spatial damage.' },
+    { name: 'Scythe of Sorrow', desc: 'The awakened special rips open a dimensional tear for devastating multi-hit spatial damage — at half the reach and half the strength it used to have as a bought super.' },
   ],
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 420 },
 };

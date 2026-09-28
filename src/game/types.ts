@@ -1,7 +1,7 @@
 export interface InputState {
   left: boolean; right: boolean; up: boolean; down: boolean;
   jump: boolean; light: boolean; heavy: boolean; dodge: boolean;
-  special: boolean; awaken: boolean; limit: boolean; ult: boolean;
+  special: boolean; awaken: boolean;
 }
 export type InputKey = keyof InputState;
 export type TechniqueVisualStyle =
@@ -13,7 +13,7 @@ export type Action = InputKey | 'pause';
 
 export const emptyInput = (): InputState => ({
   left: false, right: false, up: false, down: false, jump: false, light: false, heavy: false, dodge: false,
-  special: false, awaken: false, limit: false, ult: false,
+  special: false, awaken: false,
 });
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -96,14 +96,19 @@ export interface MoveDef {
   onFrame?: (f: any, frame: number, g: any) => void;
   onHit?: (f: any, target: any, g: any, hit: HitDef) => void;
   onCounter?: (f: any, attacker: any, g: any) => void;
-  ult?: string;
   airDrift?: number;
   trail?: string;
   desc?: string;
   vfx?: string;
   variantOf?: string;
-  /** Identifies the input family and stance for HUD, tutorials, and preview choreography. */
-  ability?: 'special' | 'limit' | 'awaken' | 'awakened' | 'ultimate';
+  /**
+   * Identifies the input family and stance for HUD, tutorials, and preview choreography.
+   *
+   * `awaken` is the transformation itself, and the three `awaken*` tiers are the
+   * kit it grants. They are distinct from `special` because the awakened kit is
+   * only reachable while the gauge is draining, which the HUD has to say out loud.
+   */
+  ability?: 'special' | 'awaken' | 'awakenLight' | 'awakenHeavy' | 'awakened';
   stance?: 'neutral' | 'side' | 'down' | 'air';
   /**
    * The move is performed by a summoned Stand rather than by the fighter's own
@@ -116,12 +121,31 @@ export interface MoveDef {
   chainLabel?: string;
   techniqueProfile?: string;
   techniqueStyle?: TechniqueVisualStyle;
+  /**
+   * Suppresses the generic per-contact impact punctuation (the hard glow disc,
+   * the shock ring and the manga star). Sustained and piercing attacks re-hit on
+   * a short cadence, so punctuating every frame stacks dozens of rings on one
+   * point and buries the attack's own visual. The damage, hitstun and hitstop
+   * are all unaffected — this is presentation only.
+   */
+  quietHits?: boolean;
+  /**
+   * Scales everything this move deals, projectiles included, to `p`.
+   *
+   * Set on a retained set-piece so a re-homed domain is weakened *completely*:
+   * the melee hits are scaled when the move is built, and `Game.spawnProj` reads
+   * this off the owner for anything the choreography throws. Without it, a domain
+   * with a 4-damage melee and a 34-damage blast would only look weakened.
+   */
+  domainPower?: number;
+  /** Banner text stamped on the frame the move releases. */
+  label?: string;
   chains?: {
     light?: string;
     heavy?: string;
     special?: string;
+    /** Only the awakened kit can chain into these; unreachable while sealed. */
     awaken?: string;
-    limit?: string;
     window?: [number, number];
     onHitOnly?: boolean;
   };

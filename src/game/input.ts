@@ -12,55 +12,49 @@ export const ACTIONS: { id: Action; label: string }[] = [
   { id: 'heavy', label: 'Heavy Attack' },
   { id: 'dodge', label: 'Dodge / Dash' },
   { id: 'special', label: 'Signature Special' },
-  { id: 'awaken', label: 'Awaken / U Chain Starter' },
-  { id: 'limit', label: 'Limit Break' },
-  { id: 'ult', label: 'Ultimate' },
+  { id: 'awaken', label: 'Awaken (needs a full gauge)' },
   { id: 'pause', label: 'Pause' },
 ];
 
+/**
+ * The combat row is one hand, three fingers deep: J light, K heavy, L special,
+ * and R to spend a full Awakening gauge on a whole second moveset.
+ */
 export const DEFAULT_BINDINGS: Bindings = {
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
   up: ['KeyW', 'ArrowUp'],
   down: ['KeyS', 'ArrowDown'],
   jump: ['Space'],
-  light: ['KeyH', 'KeyZ'],
-  heavy: ['KeyJ', 'KeyX'],
+  light: ['KeyJ', 'KeyH'],
+  heavy: ['KeyK', 'KeyX'],
   dodge: ['ShiftLeft', 'KeyC', 'KeyO'],
-  special: ['KeyK', 'KeyV'],
-  awaken: ['KeyU'],
-  limit: ['KeyL'],
-  ult: ['KeyR', 'KeyB', 'KeyI'],
+  special: ['KeyL', 'KeyV'],
+  awaken: ['KeyR', 'KeyB'],
   pause: ['Escape', 'KeyP'],
 };
 
-const LS = 'shonen-brawl-bindings-v5';
+const LS = 'shonen-brawl-bindings-v6';
+
 export function loadBindings(): Bindings {
   const defaults = JSON.parse(JSON.stringify(DEFAULT_BINDINGS)) as Bindings;
   try {
     const current = localStorage.getItem(LS);
-    const raw = current || localStorage.getItem('shonen-brawl-bindings-v4') || localStorage.getItem('shonen-brawl-bindings-v3');
-    if (!raw) return defaults;
-    const saved = JSON.parse(raw) as Partial<Bindings>;
-    const out = { ...defaults } as Bindings;
-    for (const action of Object.keys(defaults) as Action[]) {
-      const values = saved[action];
-      if (Array.isArray(values)) out[action] = values.filter((key): key is string => typeof key === 'string' && !!key).slice(0, 3);
-      if (!out[action].length && !current) out[action] = [...defaults[action]];
+    if (current) {
+      const saved = JSON.parse(current) as Partial<Bindings>;
+      const out = { ...defaults } as Bindings;
+      for (const action of Object.keys(defaults) as Action[]) {
+        const values = saved[action];
+        if (Array.isArray(values)) out[action] = values.filter((key): key is string => typeof key === 'string' && !!key).slice(0, 3);
+        if (!out[action].length) out[action] = [...defaults[action]];
+      }
+      return out;
     }
-    // A saved v5 layout is already migrated. Preserve the user's remapped keys.
-    if (current) return out;
-    // Migrate the v4 layout (J/K/L/H) to the new H/J/K/L combat layout.
-    // Keep non-reserved custom alternates, but reserve the five technique/attack keys.
-    const attackActions: Action[] = ['light', 'heavy', 'special', 'awaken', 'limit'];
-    const reserved = new Set(['KeyH', 'KeyJ', 'KeyK', 'KeyL', 'KeyU']);
-    for (const action of attackActions) out[action] = out[action].filter((key) => !reserved.has(key));
-    out.light = ['KeyH', ...out.light.filter((key) => !reserved.has(key))].slice(0, 3);
-    out.heavy = ['KeyJ', ...out.heavy.filter((key) => !reserved.has(key))].slice(0, 3);
-    out.special = ['KeyK', ...out.special.filter((key) => !reserved.has(key))].slice(0, 3);
-    out.awaken = ['KeyU', ...out.awaken.filter((key) => !reserved.has(key))].slice(0, 3);
-    out.limit = ['KeyL', ...out.limit.filter((key) => !reserved.has(key))].slice(0, 3);
-    return out;
+    // Any older layout is a different game: the old extra ability and the old
+    // ultimate button no longer exist, and the combat row moved one key over.
+    // Honouring it would leave a player holding a light attack on H that does
+    // nothing, so older layouts are retired rather than half-migrated.
+    return defaults;
   } catch { /* corrupted or unavailable storage falls back to defaults */ }
   return defaults;
 }
@@ -107,7 +101,7 @@ export function readGamepad(): (InputState & { pause: boolean }) | null {
     const ax = p.axes[0] || 0, ay = p.axes[1] || 0;
     return {
       left: ax < -0.4 || b(14), right: ax > 0.4 || b(15), up: ay < -0.5 || b(12), down: ay > 0.5 || b(13),
-      jump: b(0), heavy: b(1), light: b(2), special: b(3), awaken: b(4), dodge: b(5) || b(6), limit: b(7), ult: b(10) || b(11), pause: b(9),
+      jump: b(0), light: b(2), heavy: b(1), dodge: b(5) || b(6), special: b(3), awaken: b(7), pause: b(9),
     };
   }
   return null;

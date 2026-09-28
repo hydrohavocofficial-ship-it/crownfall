@@ -2,8 +2,8 @@ import type { CharDef, MoveKey } from './characters';
 import type { MoveDef, InputKey } from './types';
 import { keyLabel, type Bindings } from './input';
 
-export type ChainAction = 'light' | 'heavy' | 'special' | 'limit' | 'awaken';
-export const CHAIN_ACTIONS: ChainAction[] = ['light', 'heavy', 'special', 'limit', 'awaken'];
+export type ChainAction = 'light' | 'heavy' | 'special' | 'awaken';
+export const CHAIN_ACTIONS: ChainAction[] = ['light', 'heavy', 'special', 'awaken'];
 export interface MoveCommand { key: MoveKey; move: MoveDef; input: string; stance: string; chain: boolean; }
 
 /** Traverse the same explicit move graph the controller executes. No invented recipes. */
@@ -16,9 +16,14 @@ export function moveCatalog(character: CharDef, bindings: Bindings): MoveCommand
     ['rec', 'heavy', character.moves.aig ? 'Air + up' : 'Air'], ['gp', 'heavy', 'Air + down'],
     ['aig', 'heavy', 'Air'], ['nspec', 'special', 'Neutral'], ['sspec', 'special', 'Side'],
     ['dspec', 'special', 'Down'], ['aspec', 'special', 'Air'],
-    ['nex', 'limit', 'Neutral'], ['sex', 'limit', 'Side'], ['dex', 'limit', 'Down'], ['aex', 'limit', 'Air'],
     ['naw', 'awaken', 'Neutral'], ['saw', 'awaken', 'Side'], ['daw', 'awaken', 'Down'], ['aaw', 'awaken', 'Air'],
-    ['ult', 'ult', 'Any stance'],
+    // The awakened kit. Gated on a full gauge, like the transformation itself.
+    ['nwl', 'light', 'AWAKENED · Neutral'], ['swl', 'light', 'AWAKENED · Side'],
+    ['dwl', 'light', 'AWAKENED · Down'], ['awl', 'light', 'AWAKENED · Air'],
+    ['nwh', 'heavy', 'AWAKENED · Neutral'], ['swh', 'heavy', 'AWAKENED · Side'],
+    ['dwh', 'heavy', 'AWAKENED · Down'], ['awh', 'heavy', 'AWAKENED · Air'],
+    ['nfu', 'special', 'AWAKENED · Neutral'], ['sfu', 'special', 'AWAKENED · Side'],
+    ['dfu', 'special', 'AWAKENED · Down'], ['afu', 'special', 'AWAKENED · Air'],
   ];
   const result: MoveCommand[] = [];
   const seen = new Set<string>();

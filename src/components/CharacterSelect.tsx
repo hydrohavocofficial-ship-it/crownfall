@@ -89,16 +89,17 @@ export default function CharacterSelect({ cfg, setCfg, onNext, onBack }: Props) 
                   </div>
                 ))}
               </div>
-              <div className="text-xs font-bold tracking-[0.25em] text-white/50 mt-1">K / L / U TECHNIQUES & ULTIMATE</div>
+              <div className="text-xs font-bold tracking-[0.25em] text-white/50 mt-1">SPECIALS &amp; THE AWAKENING</div>
               <div className="grid grid-cols-2 gap-1.5">
                 {c.abilities.map((a) => {
-                  const ultimate = a.key.includes('ULTIMATE');
-                  const awaken = a.key.startsWith('U');
-                  const limit = a.key.startsWith('L');
+                  const awakened = a.key.includes('AWAKENED');
+                  const awaken = a.key.startsWith('R');
+                  const special = a.key.startsWith('L');
+                  const accent = awakened ? '#ffd24a' : awaken ? '#b067ff' : special ? '#ffd778' : c.color;
                   return (
-                    <div key={a.key} className={`bg-black/55 border-l-4 px-2.5 py-1 ${ultimate ? 'col-span-2' : ''}`} style={{ borderColor: ultimate ? '#ffd24a' : awaken ? '#b067ff' : limit ? '#ffb52e' : c.color, boxShadow: awaken || limit ? `inset 0 0 18px ${awaken ? '#b067ff18' : '#ffb52e18'}` : undefined }}>
+                    <div key={a.key} className="bg-black/55 border-l-4 px-2.5 py-1" style={{ borderColor: accent, boxShadow: awakened || awaken ? `inset 0 0 18px ${awakened ? '#ffd24a18' : '#b067ff18'}` : undefined }}>
                       <div className="text-[9px] font-bold tracking-widest text-white/50">{a.key}</div>
-                      <div className="font-display text-base leading-tight" style={{ color: ultimate ? '#ffd24a' : awaken ? '#d7b8ff' : limit ? '#ffd778' : '#fff' }}>{a.name}</div>
+                      <div className="font-display text-base leading-tight" style={{ color: awakened ? '#ffd24a' : awaken ? '#d7b8ff' : special ? '#ffd778' : '#fff' }}>{a.name}</div>
                       <div className="text-[11px] text-white/70 font-semibold leading-tight">{a.desc}</div>
                     </div>
                   );

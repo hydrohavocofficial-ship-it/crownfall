@@ -1,17 +1,23 @@
 import { CharDef, MoveKey } from './characters';
 import { Controller } from './input';
 import { MoveDef } from './types';
-import { computePose, drawFighter, drawStandDio } from './render';
+import { computePose, drawFighter, drawStandDio, drawGhosts, type Ghost } from './render';
 import { runVfx } from './vfx';
 import { sfx, attackSound, slashTierFor } from './audio';
+import { AWAKEN_DAMAGE, AWAKEN_SPEED, AWAKEN_SEAL, GAUGE_DRAIN, JUGGLE_BUDGET, AWAKEN_FLOOR } from './combat';
 
 export const GRAV = 0.62;
 const SPECIALS: MoveKey[] = ['nspec', 'sspec', 'dspec'];
-const LIMIT_MOVES: MoveKey[] = ['nex', 'sex', 'dex', 'aex', 'boss_finisher'];
-const AWAKEN_MOVES: MoveKey[] = ['naw', 'saw', 'daw', 'aaw'];
-const COOLDOWN_MOVES: MoveKey[] = [...SPECIALS, ...LIMIT_MOVES, ...AWAKEN_MOVES];
-const EXTRA_COOLDOWN_MOVES = ['aspec', 'aig'] as const;
+export const AWAKEN_MOVES: MoveKey[] = ['naw', 'saw', 'daw', 'aaw'];
+const AWAKEN_LIGHT: MoveKey[] = ['nwl', 'swl', 'dwl', 'awl'];
+const AWAKEN_HEAVY: MoveKey[] = ['nwh', 'swh', 'dwh', 'awh'];
+const AWAKEN_SPECIAL: MoveKey[] = ['nfu', 'sfu', 'dfu', 'afu'];
+const COOLDOWN_MOVES: MoveKey[] = [...SPECIALS, ...AWAKEN_MOVES, ...AWAKEN_LIGHT, ...AWAKEN_HEAVY, ...AWAKEN_SPECIAL];
+const EXTRA_COOLDOWN_MOVES = ['aspec', 'aig', 'boss_heavy2'] as const;
 const SIGS: MoveKey[] = ['nsig', 'ssig', 'dsig'];
+
+/** The buttons a cancel can be bound to, in the order they are offered. */
+const CHAIN_ACTIONS = ['light', 'heavy', 'special', 'awaken'] as const;
 
 export class Fighter {
   def: CharDef; look: CharDef['look']; scale: number; hw: number; h: number;
@@ -26,8 +32,39 @@ export class Fighter {
   move: MoveDef | null = null; moveKey: MoveKey | null = null; moveFrame = 0; moveDur = 0; moveActiveEnd = 0;
   hitMap = new Map<Fighter, Map<number, number>>();
   hitstun = 0; hitstop = 0; invuln = 0; tumble = 0; shakeT = 0;
-  meter = 0; cds: Record<string, number> = { nspec: 0, sspec: 0, dspec: 0, nex: 0, sex: 0, dex: 0, aex: 0, naw: 0, saw: 0, daw: 0, aaw: 0, aspec: 0, aig: 0 };
+  meter = 0; cds: Record<string, number> = { nspec: 0, sspec: 0, dspec: 0, naw: 0, saw: 0, daw: 0, aaw: 0, nwl: 0, swl: 0, dwl: 0, awl: 0, nwh: 0, swh: 0, dwh: 0, awh: 0, nfu: 0, sfu: 0, dfu: 0, afu: 0, aspec: 0, aig: 0, boss_heavy2: 0 };
   godT = 0; devilT = 0; auraT = 0;
+  /**
+   * AWAKENED.
+   *
+   * Set the frame a full gauge is spent, cleared when the gauge empties or the
+   * fighter falls. While it is set, the three attack buttons address a different
+   * moveset (see `AWAKENED_TIERS`) and the gauge drains on its own.
+   */
+  awakened = false;
+  /** Frames the transformation itself has been locked out for. */
+  awakenLock = 0;
+  /**
+   * Frames after the Awakening closed during which this fighter's own blows
+   * still cannot build the gauge.
+   *
+   * The state is resolved in `update`, and a hit lands after it, so without this
+   * the last hit of an exhausted Awakening - the one that emptied the bar - would
+   * be paid for with a sliver of the gauge it just spent. The Awakening's damage
+   * is never the Awakening's fuel, including on the frame it ends.
+   */
+  awakenSealedT = 0;
+  /**
+   * Re-launches this fighter can still be given before they stop being lifted.
+   *
+   * Damage-scaled knockback alone does not stop a juggle: a move with a wide
+   * active window can keep touching a body that gravity has not yet caught, and
+   * the sequence never ends. This is the hard stop. Reset on landing and on
+   * respawn; see `JUGGLE_BUDGET`.
+   */
+  juggleLeft = JUGGLE_BUDGET;
+  /** How many times this sequence has already launched them. */
+  juggleCount = 0;
   animT = 0; runPhase = 0; djumpT = 99; landT = 0;
   dropT = 0; wallSide = 0; fastFall = false;
   trail: { x: number; y: number }[] = [];
@@ -55,6 +92,17 @@ export class Fighter {
   standT = 0; standDur = 0; standAttackT = 0; standActive = false;
   /** Set by the engine each step while this fighter is held in frozen time. */
   frozen = false;
+  /**
+   * ULTRA INSTINCT — Migatte no Gokui (movement without thought).
+   * `evadeT` counts down the silver after-image window left by an autonomous
+   * slip; `evadeCD` is the two-second internal gauge that keeps the passive
+   * from becoming an unconditional "no".
+   */
+  evadeT = 0; evadeCD = 0;
+  /** Motion after-images. Filled only while the body is genuinely moving fast. */
+  ghosts: Ghost[] = [];
+  /** Guards the one-shot launch speed-line burst per hitstun. */
+  launchFx = false;
 
   constructor(def: CharDef, idx: number, label: string, color: string, isCPU: boolean) {
     this.def = def; this.look = def.look; this.scale = def.stats.scale;
@@ -66,8 +114,48 @@ export class Fighter {
   get cx() { return this.x; }
   get cy() { return this.y - this.h / 2; }
 
-  speedMul() { return (this.godT > 0 ? 1.4 : 1) * (this.devilT > 0 ? 1.12 : 1); }
-  dmgMul() { return this.devilT > 0 ? 1.3 : this.godT > 0 ? 1.1 : 1; }
+  /**
+   * Which of the three awakened tiers a button addresses right now.
+   *
+   * The base kit is a plain stance lookup; the awakened kit is the same lookup
+   * into a different table. Both take their direction from the stick at the
+   * instant of the press, so the Awakening changes *what* the buttons do without
+   * changing how they are aimed.
+   */
+  private stanceTier(tiers: MoveKey[]): MoveKey {
+    const c = this.ctrl;
+    if (!this.grounded) return tiers[3];
+    return c.dirY() > 0 ? tiers[2] : c.dirX() ? tiers[1] : tiers[0];
+  }
+
+  speedMul() {
+    return (this.godT > 0 ? 1.4 : 1) * (this.devilT > 0 ? 1.12 : 1) * (this.awakened ? AWAKEN_SPEED : 1);
+  }
+  dmgMul() {
+    // The Awakening's own bonus is deliberately small. The power is supposed to
+    // be in the moveset it grants; a flat multiplier on top of a stronger kit is
+    // how a transformation quietly doubles a character's output.
+    return (this.devilT > 0 ? 1.3 : this.godT > 0 ? 1.1 : 1) * (this.awakened ? AWAKEN_DAMAGE : 1);
+  }
+
+  /**
+   * Ends the Awakening and hands the fighter back to their base kit.
+   *
+   * The gauge is *not* refunded: it has been spent, and the time it bought has
+   * been lived through. Leaving a sliver behind would let a player re-awaken on
+   * the next hit and never be out of the state.
+   */
+  endAwaken() {
+    if (!this.awakened) return;
+    this.awakened = false;
+    this.meter = 0;
+    this.auraT = 0;
+    this.awakenSealedT = AWAKEN_SEAL;
+    // A pending transformation is cancelled outright: it is the same resource.
+    this.move = null; this.moveKey = null;
+    this.state = this.grounded ? 'idle' : 'air';
+    this.stateT = 0; this.trail = [];
+  }
 
   startMove(key: MoveKey, g: any) {
     const m = this.def.moves[key];
@@ -91,17 +179,45 @@ export class Fighter {
     this.moveConnected = false;
     this.recentMoves.push({ key, name: m.name || key, frame: g.frame });
     this.recentMoves = this.recentMoves.slice(-4);
-    if (LIMIT_MOVES.includes(key)) {
-      const cd = Math.max(240, m.cd || 240) * (this.godT > 0 ? 0.5 : 1);
-      for (const moveKey of LIMIT_MOVES) this.cds[moveKey] = cd;
-    } else if (AWAKEN_MOVES.includes(key)) {
-      const cd = Math.max(240, m.cd || 240) * (this.godT > 0 ? 0.5 : 1);
+    /**
+     * COOLDOWNS.
+     *
+     * Cooldowns are per *tier*, not per move, so a whole stance set is spent
+     * together. A boss's finisher is their neutral awakened special, so it is
+     * covered by the awakened-special tier like everyone else's.
+     */
+    const rate = this.godT > 0 ? 0.5 : 1;
+    if (AWAKEN_MOVES.includes(key)) {
+      const cd = Math.max(240, m.cd || 240) * rate;
       for (const moveKey of AWAKEN_MOVES) this.cds[moveKey] = cd;
-    } else if (SPECIALS.includes(key)) this.cds[key] = Math.max(150, m.cd || 150) * (this.godT > 0 ? 0.5 : 1);
-    else if (key === 'aspec' as MoveKey) this.cds.aspec = Math.max(150, m.cd || 150) * (this.godT > 0 ? 0.5 : 1);
-    else if (key === 'aig' as MoveKey) this.cds.aig = Math.max(150, m.cd || 150) * (this.godT > 0 ? 0.5 : 1);
+      // The gauge is not spent here - it *is* the clock. It was full a frame ago
+      // (the engine gates the press on it) and it now falls from 100 to 0 over
+      // the life of the state. Zeroing it here would end the Awakening on the
+      // frame it began.
+      this.meter = Math.min(100, Math.max(this.meter, AWAKEN_FLOOR));
+      this.awakened = true;
+      this.awakenLock = Math.max(this.awakenLock, 240);
+    } else if (AWAKEN_SPECIAL.includes(key)) {
+      const cd = Math.max(240, m.cd || 240) * rate;
+      for (const moveKey of AWAKEN_SPECIAL) this.cds[moveKey] = cd;
+    } else if (AWAKEN_HEAVY.includes(key)) {
+      this.cds[key] = Math.max(90, m.cd || 90) * rate;
+    } else if (SPECIALS.includes(key)) this.cds[key] = Math.max(150, m.cd || 150) * rate;
+    else if (key === 'aspec' as MoveKey) this.cds.aspec = Math.max(150, m.cd || 150) * rate;
+    else if (key === 'aig' as MoveKey) this.cds.aig = Math.max(150, m.cd || 150) * rate;
     if (key === 'rec') this.recoveryUsed = true;
-    if (key === 'ult') { if (!g.infiniteMeter || this.isCPU) this.meter = 0; else this.meter = 100; g.cinematic(this, m.ult || m.name, m.cin); }
+    /**
+     * ULTRA INSTINCT FORM. A `uiForm` fighter's Awakening repaints him in the
+     * silver crown and the cosmic shell. This is a rule rather than a hook inside
+     * each move, because a fighter's transformation can be re-homed after
+     * authoring (Goku's Spirit Bomb arrives as a signature override) and the
+     * silver form has to survive that.
+     */
+    if (this.def.uiForm && m.ability === 'awaken') this.godT = Math.max(this.godT, 220);
+    // A retained set-piece earns a short cinematic. It is the one place the
+    // engine still stops the world, and it is now behind a cooldown and a
+    // fifteen-second window rather than a spent bar.
+    if (m.cin && m.ability === 'awakened' && this.grounded) g.cinematic(this, m.name, m.cin);
     this.applyVel(0);
     m.onStart?.(this, g);
   }
@@ -162,20 +278,36 @@ export class Fighter {
         return true;
       }
     }
-    if (c.pressed('ult') && this.meter >= 100) { c.consume('ult'); this.startMove('ult', g); return true; }
-    if (c.pressed('awaken')) {
-      const key: MoveKey = !this.grounded ? 'aaw' : dy > 0 ? 'daw' : dx ? 'saw' : 'naw';
-      if (this.cds[key] <= 0) { c.consume('awaken'); this.startMove(key, g); return true; }
-    }
-    if (c.pressed('limit')) {
-      const key: MoveKey = !this.grounded ? 'aex' : dy > 0 ? 'dex' : dx ? 'sex' : 'nex';
-      if (this.cds[key] <= 0) { c.consume('limit'); this.startMove(key, g); return true; }
+    /**
+     * AWAKEN. The only thing the gauge buys.
+     *
+     * A full gauge opens the transformation; the press itself is gated on it, so
+     * there is no way to "start" an Awakening and finish it later. Once it is
+     * open the button does nothing for the rest of the state - the Awakening is
+     * already running, and the player is fighting in it, not choosing to.
+     */
+    if (c.pressed('awaken') && !this.awakened) {
+      const key = this.stanceTier(AWAKEN_MOVES);
+      if (this.meter >= 100 && this.awakenLock <= 0 && (this.cds[key] ?? 0) <= 0) {
+        c.consume('awaken');
+        this.startMove(key, g);
+        return true;
+      }
     }
     if (c.pressed('special')) {
-      const key: MoveKey = this.def.moves.aspec && !this.grounded && this.state !== 'wall' ? 'aspec' : dy > 0 ? 'dspec' : dx ? 'sspec' : 'nspec';
+      const key: MoveKey = this.awakened
+        ? this.stanceTier(AWAKEN_SPECIAL)
+        : this.def.moves.aspec && !this.grounded && this.state !== 'wall' ? 'aspec'
+          : dy > 0 ? 'dspec' : dx ? 'sspec' : 'nspec';
       if ((this.cds[key] ?? 0) <= 0) { c.consume('special'); this.startMove(key, g); return true; }
     }
     if (c.pressed('heavy')) {
+      // The awakened heavy is a launcher first and a signature second: it always
+      // answers, so a player who is mid-combo never has to think about it.
+      if (this.awakened) {
+        const key = this.stanceTier(AWAKEN_HEAVY);
+        if ((this.cds[key] ?? 0) <= 0) { c.consume('heavy'); this.startMove(key, g); return true; }
+      }
       if (this.grounded || this.state === 'dash') { c.consume('heavy'); this.startMove(dy > 0 ? 'dsig' : dx ? 'ssig' : 'nsig', g); return true; }
       if (dy > 0) { c.consume('heavy'); this.startMove('gp', g); return true; }
       if (dy === 0 && this.def.moves.aig && (this.cds.aig ?? 0) <= 0) { c.consume('heavy'); this.startMove('aig', g); return true; }
@@ -183,11 +315,30 @@ export class Fighter {
     }
     if (c.pressed('light')) {
       c.consume('light');
+      if (this.awakened) { this.startMove(this.stanceTier(AWAKEN_LIGHT), g); return true; }
       if (this.grounded || this.state === 'dash') this.startMove(dy > 0 ? 'dlight' : dx ? 'slight' : 'nlight', g);
       else this.startMove(dy > 0 ? 'dair' : dx ? 'sair' : 'nair', g);
       return true;
     }
     return false;
+  }
+
+  /**
+   * THE AWAKENING CLOCK.
+   *
+   * The gauge is the clock. It falls for as long as the state is open, and when
+   * it reaches zero the state closes - there is no timer to remember, so the
+   * bar on screen and the time left are the same number and a player can always
+   * tell exactly how long they have.
+   *
+   * It is its own method because the engine also calls it while a cinematic is
+   * holding the screen: a set-piece that stops the world must not stop the
+   * fifteen seconds the HUD is still promising.
+   */
+  drainAwaken() {
+    if (!this.awakened) return;
+    this.meter = Math.max(0, this.meter - GAUGE_DRAIN);
+    if (this.meter <= 0) this.endAwaken();
   }
 
   update(g: any) {
@@ -199,10 +350,42 @@ export class Fighter {
     }
     if (this.invuln > 0) this.invuln--;
     if (this.dodgeCD > 0) this.dodgeCD--;
+    if (this.awakenLock > 0) this.awakenLock--;
+    if (this.awakenSealedT > 0) this.awakenSealedT--;
     for (const k of [...COOLDOWN_MOVES, ...EXTRA_COOLDOWN_MOVES]) if (this.cds[k] > 0) this.cds[k] -= this.godT > 0 ? 2 : 1;
+    /**
+     * THE AWAKENING DRAINS.
+     *
+     * See `drainAwaken`: the gauge is the clock, and it runs for as long as the
+     * state is open - including while a cinematic is holding the screen.
+     */
+    if (this.awakened) {
+      this.drainAwaken();
+      this.auraT = Math.max(this.auraT, 12);
+      if (this.animT % 3 === 0) {
+        const a = Math.random() * 6.28;
+        g.fx.add({ x: this.x + Math.cos(a) * 30, y: this.y - 40 + Math.sin(a) * 34, vx: -Math.cos(a) * 1.6, vy: -Math.sin(a) * 1.6 - 0.6, color: Math.random() < .5 ? this.look.energy : this.look.energy2, kind: 'glow', life: 18, size: 5 + Math.random() * 4 });
+      }
+    }
     if (this.godT > 0) { this.godT--; if (this.animT % 3 === 0) g.fx.bolt(this.x, this.y - 40, this.x + (Math.random() - .5) * 70, this.y - 40 + (Math.random() - .5) * 90, '#7fd8ff', 4, 1.5); }
     if (this.devilT > 0) { this.devilT--; if (this.animT % 2 === 0) g.fx.add({ x: this.x + (Math.random() - .5) * 36, y: this.y - Math.random() * 80, vy: -1.5, color: Math.random() < .5 ? '#150306' : '#c0102a', kind: Math.random() < .5 ? 'smoke' : 'glow', life: 26, size: 7 }); }
     if (this.auraT > 0) this.auraT--;
+    if (this.evadeT > 0) this.evadeT--;
+    if (this.evadeCD > 0) this.evadeCD--;
+    // ---- motion after-images -------------------------------------------------
+    // Only a genuinely fast body leaves ghosts, so a normal walk costs nothing.
+    const ghSpeed = Math.hypot(this.vx, this.vy);
+    const teleporting = this.state === 'dodge' || (this.state === 'dash' && this.invuln > 0) || this.evadeT > 0;
+    if (ghSpeed > 6.5 || teleporting) {
+      const life = this.evadeT > 0 ? 14 : 10;
+      this.ghosts.push({ x: this.x, y: this.y, facing: this.facing, scale: this.scale, life, max: life, color: this.look.energy });
+      if (this.ghosts.length > 5) this.ghosts.shift();
+    }
+    for (const gh of this.ghosts) gh.life--;
+    // Oldest first, one at a time, so the trail fades out smoothly instead of
+    // vanishing in a block.
+    while (this.ghosts.length && this.ghosts[0].life <= 0) this.ghosts.shift();
+    if (this.state === 'ko') this.ghosts.length = 0;
     if (this.standActive) {
       this.standT++;
       if (this.standDur > 0) this.standDur--;
@@ -255,6 +438,8 @@ export class Fighter {
             this.vx > 0 ? 0 : Math.PI, .25, this.look.energy, 12, 'streak', 10, 2.5);
         }
         this.runPhase += 0.4;
+        // A ground dash is a teleport at speed: the panel gets its speed lines.
+        if (this.stateT === 1) g.speedBurst(this.vx > 0 ? 0 : Math.PI, 0.6);
         break;
       }
       case 'dodge': {
@@ -300,8 +485,7 @@ export class Fighter {
           const ch = m.chains;
           const w = ch.window || [Math.max(1, m.startup - 1), m.dur - 1];
           if (fr >= w[0] && fr <= w[1] && (!ch.onHitOnly || this.moveConnected)) {
-            const actions = ['light', 'special', 'awaken', 'limit', 'heavy'] as const;
-            const action = actions.find((a) => {
+            const action = CHAIN_ACTIONS.find((a) => {
               const key = ch[a] as MoveKey | undefined;
               return key && this.def.moves[key] && (this.cds[key] ?? 0) <= 0 && c.pressed(a);
             });
@@ -322,7 +506,7 @@ export class Fighter {
           // Characters with recorded samples own their own attack audio; everyone
           // else keeps the original synthesised palette.
           if (this.def.styleId === 'sukuna') {
-            if (m.ability === 'ultimate') g.sukunaDomainSound(this);
+            if (m.vfx === 'sukunaShrine') g.sukunaDomainSound(this);
             else if (m.vfx === 'sukunaFuga') g.sukunaFugaSound(this);
             else g.sukunaSlash(this, slashTierFor(m));
           } else {
@@ -336,7 +520,7 @@ export class Fighter {
         m.onFrame?.(this, fr, g);
         gravMul = m.grav ?? 1;
         // Floaty moves (grav < 1) can only suspend a fighter for ~1.5s per airtime.
-        if (!this.grounded && gravMul < 1) { this.hoverT++; if (this.hoverT > 90 && this.moveKey !== 'ult') gravMul = 1; }
+        if (!this.grounded && gravMul < 1) { this.hoverT++; if (this.hoverT > 90) gravMul = 1; }
         const hasVel = m.vel && m.vel.some(([f]) => f <= fr && fr < f + 12);
         if (!this.grounded) {
           if (m.land || this.moveKey === 'nair' || this.moveKey === 'sair') {
@@ -350,7 +534,7 @@ export class Fighter {
           if (tr[0] || tr[1]) this.trail.push({ x: tr[0], y: tr[1] });
           if (this.trail.length > 9) this.trail.shift();
         } else if (this.trail.length) this.trail.shift();
-        if (m.land && this.grounded && fr > 3 && this.moveKey !== 'ult') {
+        if (m.land && this.grounded && fr > 3 && m.ability !== 'awaken') {
           if (this.moveKey === 'gp') { g.fx.ring(this.x, this.y, 10, 60, 'rgba(255,255,255,0.7)', 14, 5); g.shake(4); }
           this.endMove(); this.landT = 8; break;
         }
@@ -365,8 +549,16 @@ export class Fighter {
         if (Math.hypot(this.vx, this.vy) > 9) {
           this.tumble += 0.25 * Math.sign(this.vx || 1);
           if (this.animT % 2 === 0) g.fx.add({ x: this.x, y: this.y - 40, color: 'rgba(255,255,255,0.35)', kind: 'smoke', life: 20, size: 7 });
+          // A launch is the one moment the whole screen should react: full-screen
+          // speed lines along the launch vector, once, on the way out.
+          if (this.animT === 1 && !this.launchFx) {
+            this.launchFx = true;
+            g.speedBurst(Math.atan2(this.vy, this.vx), 1.15);
+            g.punchIn(this.x, this.y - 40, 0.1);
+            g.fx.word(this.x, this.y - 108, 'ZASH!', this.lastHitBy?.look.energy || '#ffffff', 44, 30);
+          }
         } else this.tumble *= 0.85;
-        if (this.hitstun <= 0) { this.state = this.grounded ? 'idle' : 'air'; this.tumble = 0; }
+        if (this.hitstun <= 0) { this.state = this.grounded ? 'idle' : 'air'; this.tumble = 0; this.launchFx = false; }
         break;
       }
     }
@@ -406,6 +598,7 @@ export class Fighter {
 
   draw(ctx: CanvasRenderingContext2D, time: number, showHit: boolean) {
     if (this.state === 'ko') return;
+    drawGhosts(ctx, this.ghosts);
     // Motion trail: a tapered smear whose width follows the weapon or fist tip.
     if (this.trail.length > 2) {
       ctx.save(); ctx.globalCompositeOperation = 'lighter';

@@ -49,6 +49,7 @@ export default function GameScreen({ cfg, bindings, tapJump, onEnd, onQuit }: Pr
   }, [training]);
 
   const k = (a: keyof Bindings) => keyLabel(bindings[a][0]);
+  const g0 = gameRef.current;
 
   return (
     <div className="absolute inset-0 bg-black">
@@ -80,10 +81,10 @@ export default function GameScreen({ cfg, bindings, tapJump, onEnd, onQuit }: Pr
             ))}
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer"><input type="checkbox" checked={tr.hit} onChange={(e) => setTr({ ...tr, hit: e.target.checked })} /> Show hitboxes</label>
-          <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer"><input type="checkbox" checked={tr.meter} onChange={(e) => setTr({ ...tr, meter: e.target.checked })} /> Infinite ultimate meter</label>
+          <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer"><input type="checkbox" checked={tr.meter} onChange={(e) => setTr({ ...tr, meter: e.target.checked })} /> Infinite Awakening gauge</label>
           <button onClick={() => { gameRef.current?.resetPositions(); sfx('confirm'); }} className="mt-2 w-full bg-white/10 hover:bg-white/20 py-1 font-bold text-sm cursor-pointer border border-white/20">↺ RESET POSITIONS</button>
           <div className="mt-2 text-[11px] text-white/60 leading-tight font-semibold">
-            Move {k('left')}/{k('right')} · Jump {k('jump')} · Light {k('light')} · Heavy {k('heavy')} · Dodge {k('dodge')} · Special {k('special')} · Limit {k('limit')} · Awaken {k('awaken')} (then {k('special')} for variant) · Ult {k('ult')} · Aim {k('up')}/{k('down')}
+            Move {k('left')}/{k('right')} · Jump {k('jump')} · Light {k('light')} · Heavy {k('heavy')} · Dodge {k('dodge')} · Special {k('special')} · Awaken {k('awaken')} (then {k('light')}/{k('heavy')}/{k('special')} are a new moveset) · Aim {k('up')}/{k('down')}
           </div>
         </div>
       )}
@@ -103,12 +104,11 @@ export default function GameScreen({ cfg, bindings, tapJump, onEnd, onQuit }: Pr
               <span>Heavy: <b className="text-white">{k('heavy')}</b></span>
               <span>Dodge/Dash: <b className="text-white">{k('dodge')}</b></span>
               <span>Special: <b className="text-white">{k('special')}</b></span>
-              <span>Limit: <b className="text-white">{k('limit')}</b></span>
               <span>Awaken: <b className="text-white">{k('awaken')}</b></span>
-              <span>U → K: <b className="text-white">Awakened</b></span>
-              <span>Ultimate: <b className="text-white">{k('ult')}</b></span>
+              <span>Awakened: <b className="text-white">{k('light')} / {k('heavy')} / {k('special')}</b></span>
               <span>Pause: <b className="text-white">{k('pause')}</b></span>
             </div>
+            {g0?.faults ? <div className="mt-2 text-xs text-amber-300/80">The match hit {g0.faults} frame fault{g0.faults === 1 ? '' : 's'} and kept running — see the console for detail.</div> : null}
           </div>
         </div>
       )}

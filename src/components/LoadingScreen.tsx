@@ -9,7 +9,7 @@ const TIPS = [
   'Cling to walls by holding toward them in the air, then jump to climb.',
   'Heavy attacks in the air: Neutral = Recovery, Down = Ground Pound.',
   'Lights are for combos; Heavies are for knockouts. Higher damage = further knockback.',
-  'Your Ultimate meter fills by dealing and taking damage.',
+  'Your Awakening gauge fills by dealing and taking damage — slowly, on purpose.',
   'Press Down on a soft platform to drop through it. Press Down in the air to fast-fall.',
   "Asta's Anti-Magic Reflect sends projectiles back at their owner!",
   "Killua's Counter teleports him behind the attacker — don't swing blindly.",

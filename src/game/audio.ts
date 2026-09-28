@@ -62,6 +62,43 @@ function noise(dur: number, vol: number, freq: number, type: BiquadFilterType, s
   s.onended = () => { s.disconnect(); f.disconnect(); g.disconnect(); };
 }
 
+/**
+ * A resonant bandpass sweep, detuned. This is the workhorse behind the
+ * Ultra Instinct palette: it is the only primitive in the kit that can sound
+ * like *glass ringing* rather than like an oscillator, and the very short
+ * attack is what makes it read as supernatural instead of musical.
+ */
+function shimmer(freq: number, dur: number, vol: number, slide: number, delay = 0, voices = 3) {
+  const c = ensure(); if (!c || !master || !noiseBuf) return;
+  const t = c.currentTime + delay;
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass'; bp.Q.value = 9;
+  bp.frequency.setValueAtTime(freq, t);
+  bp.frequency.exponentialRampToValueAtTime(Math.max(80, slide), t + dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + Math.min(0.012, dur * 0.2));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const src = c.createBufferSource(); src.buffer = noiseBuf;
+  src.connect(bp); bp.connect(g); g.connect(master);
+  src.start(t, Math.random() * 0.4); src.stop(t + dur + 0.02);
+  src.onended = () => { src.disconnect(); bp.disconnect(); g.disconnect(); };
+  // Detuned partials: a handful of close sines beating against each other is
+  // what turns a single chime into a chorus shimmer.
+  for (let i = 0; i < voices; i++) {
+    const o = c.createOscillator(); const og = c.createGain();
+    o.type = 'sine';
+    const f = freq * (1 + (i - (voices - 1) / 2) * 0.0075);
+    o.frequency.setValueAtTime(f, t);
+    o.frequency.exponentialRampToValueAtTime(Math.max(80, f * (slide / freq)), t + dur);
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(vol * 0.5 / (1 + i * 0.5), t + Math.min(0.01, dur * 0.18));
+    og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(og); og.connect(master); o.start(t); o.stop(t + dur + 0.02);
+    o.onended = () => { o.disconnect(); og.disconnect(); };
+  }
+}
+
 /** Original sound palettes, synthesized locally: no downloaded samples or network requests. */
 export function attackSound(id: string, heavy = false): string {
   if (id === 'sukuna') return heavy ? 'sukuna-cleave' : 'sukuna-cut';
@@ -71,6 +108,9 @@ export function attackSound(id: string, heavy = false): string {
   if (['rengoku', 'madara'].includes(id)) return 'flame-strike';
   if (['tanjiro', 'todoroki'].includes(id)) return 'crystal-strike';
   if (id === 'denji') return 'saw-strike';
+  // Ultra Instinct has its own attack cue so every clean hit lands with a
+  // supernatural chime instead of the shared energy blip.
+  if (id === 'goku_ui') return 'ui_punch';
   if (['goku', 'naruto'].includes(id)) return 'energy-strike';
   return heavy ? 'pressure-strike' : 'swing';
 }
@@ -175,5 +215,63 @@ export function sfx(name: string, power = 1) {
     case 'go': tone(660, 0.1, 'square', 0.2); tone(990, 0.35, 'square', 0.25, undefined, 0.1); noise(0.4, 0.3, 3000, 'highpass'); break;
     case 'game': tone(300, 0.8, 'sawtooth', 0.3, 80); noise(0.8, 0.5, 2000, 'lowpass', 100); break;
     case 'whoosh': noise(0.35, 0.35, 400, 'bandpass', 3000, 0, 1); break;
+
+    // ==========================================================================
+    // ULTRA INSTINCT — the Dragon Ball Super silver palette.
+    // Six cues, all built from the same shimmer primitive, so the whole form
+    // reads as one supernatural sound world rather than a bag of noises.
+    // ==========================================================================
+    case 'ui_chime':
+      // Ethereal glass. A 3.2 kHz bandpass swept up through a ring of detuned
+      // partials, with a lower voice a fifth underneath. Plays on every
+      // autonomous slip, counter and ultimate startup.
+      shimmer(3200, 0.5, 0.12, 6200);
+      shimmer(1900, 0.62, 0.07, 4600, 0.035, 2);
+      tone(4800, 0.38, 'sine', 0.05, 7400, 0.01);
+      noise(0.34, 0.05, 5200, 'bandpass', 9000, 0, 6);
+      break;
+    case 'ui_aura':
+      // Low cosmic hum: a slow-beating detuned drone under a white-noise pulse,
+      // so the aura is felt in the chest as much as it is heard.
+      [55, 55.9, 82.4, 110.6, 164.8].forEach((f, i) => tone(f, 1.5, 'sine', 0.13 / (1 + i * 0.35), f * 0.97, i * 0.012));
+      tone(41, 1.7, 'sine', 0.3, 30, 0.02);
+      noise(0.85, 0.09, 320, 'bandpass', 900, 0, 2.5);
+      for (let i = 0; i < 6; i++) shimmer(4200 + i * 260, 0.3, 0.035, 7000, i * 0.17, 2);
+      break;
+    case 'ui_punch':
+      // Meaty low end plus a sonic-boom crack layered on the transient.
+      tone(96, 0.2, 'sine', 0.42, 34);
+      tone(58, 0.3, 'sine', 0.5, 26, 0.008);
+      noise(0.09, 0.52, 2600, 'lowpass', 260);
+      noise(0.16, 0.26, 8000, 'highpass', 2600, 0, 1.6);
+      shimmer(6400, 0.2, 0.06, 2600, 0.01, 2);
+      break;
+    case 'ui_beam':
+      // Piercing high harmonic that climbs, then collapses into a sub-bass
+      // detonation. The whole point is the pitch cliff at the end.
+      tone(300, 1.0, 'sawtooth', 0.2, 2400);
+      tone(600, 1.0, 'square', 0.08, 4200);
+      shimmer(5200, 0.95, 0.13, 9000, 0, 3);
+      noise(0.9, 0.2, 1400, 'bandpass', 7000, 0, 3);
+      tone(52, 1.3, 'sine', 0.68, 22, 0.82);
+      tone(78, 1.1, 'triangle', 0.3, 30, 0.86);
+      noise(1.1, 0.5, 1800, 'lowpass', 120, 0.84);
+      break;
+    case 'ui_slip':
+      // The instant slip itself: a supersonic whoosh with the chime riding it.
+      noise(0.22, 0.34, 600, 'bandpass', 7000, 0, 1.2);
+      tone(1500, 0.18, 'sine', 0.09, 3200);
+      shimmer(5600, 0.3, 0.09, 8800, 0.02, 2);
+      break;
+    case 'ui_ult':
+      // Supreme Godly Display: a universe-scale swell, an internal collapse,
+      // and then a reversed-gravity detonation.
+      [40, 60, 90, 135, 202].forEach((f, i) => tone(f, 2.2, 'sine', 0.16 / (1 + i * 0.3), f * 1.5, i * 0.05));
+      shimmer(3600, 1.9, 0.16, 8800, 0.1, 4);
+      noise(1.6, 0.16, 700, 'bandpass', 6000, 0.1, 2);
+      tone(34, 1.6, 'sine', 0.5, 120, 1.0);
+      noise(1.2, 0.62, 2400, 'lowpass', 90, 1.02);
+      shimmer(8800, 0.8, 0.2, 2400, 1.04, 3);
+      break;
   }
 }

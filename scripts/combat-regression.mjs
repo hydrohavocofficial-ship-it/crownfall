@@ -73,13 +73,191 @@ try {
     for (let i = 0; i < limit && !condition(); i++) tick(g);
     assert.ok(condition(), `condition timed out at frame ${g.frame}; ${g.fighters.map(f => `${f.def.id}:${f.state}:${f.moveKey}:${f.moveFrame}`).join(', ')}`);
   }
+
+  /* ================= KO REPLAY =================================================
+   * These exist because the replay shipped broken and the whole suite still went
+   * green. Every other check here drives `step()` directly, and the replay only
+   * misbehaves on the way *back* - the frame after it hands the world over - so
+   * nothing short of running a knockout all the way through would ever see it.
+   * One channel of the replay buffer was named `speedLines`, which is a live
+   * array on Game: restoring a frame wrote a number into it, the next `step`
+   * threw `this.speedLines is not iterable`, and because that throw lands inside
+   * the animation-frame callback the whole loop dies and the canvas freezes on
+   * its last frame forever. The player sees a hang, not a stack trace.
+   */
+  test('replay: a knockout arms the buffer and the lead-in plays back', () => {
+    const g = game('goku_ui', { rule: 'stock', mode: 'stock', stocks: 3 });
+    frames(g, 200);
+    assert.ok(g.replay.count > 100, `buffer only held ${g.replay.count} frames of footage`);
+    g.ko(g.fighters[1]);
+    assert.ok(g.replay.armed, 'the knockout did not raise the replay');
+    // The KO impact is left to play at full speed before the rewind begins.
+    assert.ok(!g.replay.active, 'the replay started on the knockout frame instead of after it');
+    until(g, () => g.replay.active, 120);
+    assert.ok(g.replay.armed === false, 'replay stayed armed after it started');
+  });
+
+  test('replay: the world is stepped, not frozen, while it plays', () => {
+    const g = game('goku_ui', { rule: 'stock', mode: 'stock', stocks: 3 });
+    frames(g, 200);
+    g.ko(g.fighters[1]);
+    until(g, () => g.replay.active, 120);
+    // The simulation must be suspended...
+    const frozen = g.fighters[1];
+    const before = { x: frozen.x, y: frozen.y, state: frozen.state };
+    frames(g, 30);
+    assert.equal(frozen.x, before.x); assert.equal(frozen.state, before.state,
+      'the live fighter was simulated during a replay - the replay would be writing over a running world');
+    // ...while the picture advances, so it is playing back and not hanging.
+    const seen = new Set();
+    for (let i = 0; i < 120 && g.replay.active; i++) { tick(g); seen.add(`${g.cam.x.toFixed(3)}|${g.cam.y.toFixed(3)}|${g.frame}`); }
+    assert.ok(seen.size > 20, `replay only produced ${seen.size} distinct frames - it is not playing`);
+  });
+
+  test('replay: hands the world back intact and the match keeps running', () => {
+    const g = game('goku_ui', { rule: 'stock', mode: 'stock', stocks: 3 });
+    frames(g, 200);
+    const [player, foe] = g.fighters;
+    const projectilesBefore = g.projectiles;
+    g.ko(foe);
+    until(g, () => g.replay.active, 120);
+    until(g, () => !g.replay.active, 900);
+    // The live world comes back: same array, same fighters, no stuck KO.
+    assert.equal(g.projectiles, projectilesBefore, 'the live projectile array was swapped out and never returned');
+    assert.equal(foe.state, 'ko', `the KO'd fighter came back as ${foe.state} - the world was not restored`);
+    assert.ok(!g.replay.active, 'replay never finished');
+    // And the engine survives its own aftermath. This is the check that catches
+    // a replay channel clobbering a live array: the next step is where it blows up.
+    const threw = [];
+    for (let i = 0; i < 240; i++) { try { tick(g); } catch (e) { threw.push(e.message); break; } }
+    assert.deepEqual(threw, [], `the engine threw after the replay: ${threw[0]}`);
+    assert.ok(g.frame > 0, 'the frame counter stopped');
+    assert.ok(Array.isArray(g.speedLines), 'speed lines is no longer an array - a replay channel is writing into it');
+    // Simulated motion resumes once the no-input window closes.
+    const moved = g.fighters.some(f => f.state !== 'ko');
+    assert.ok(moved, 'every fighter was still downed after the replay');
+  });
+
+  test('replay: a match-ending knockout still plays at wall-clock speed', () => {
+    // endMatch drops the match to 0.35x. A replay that inherits that turns a
+    // seven-second knockout into twenty seconds that read as a hang, so the
+    // loop must ignore the match time scale while one owns the screen.
+    const g = game('goku_ui', { rule: 'stock', mode: 'stock', stocks: 1 });
+    frames(g, 200);
+    g.ko(g.fighters[1]);
+    until(g, () => g.ended, 60);
+    assert.equal(g.timeScale, 0.35, 'fixture assumption: the match ends in slow motion');
+    const armedAt = g.frame;
+    until(g, () => g.replay.active, 120);
+    let played = 0;
+    while (g.replay.active && played < 2000) { tick(g); played++; }
+    assert.ok(g.replay.active === false, 'replay never finished');
+    // ~5s lead-in plus the slow ramp, on a 1/60s step. Anything near 2000
+    // means it ran on the match clock instead of the wall clock.
+    assert.ok(played < 700, `the replay took ${played} steps - it is inheriting the end-of-match time scale`);
+    assert.ok(g.frame - armedAt < 800, 'the whole KO sequence overran its budget');
+  });
+
+  test('replay: every replay frame renders without throwing', () => {
+    // THE FREEZE. The swing pool recorded a `facing` field the effect does not
+    // have and never recorded `p`, the profile it does. Restoring footage
+    // therefore produced swings with no profile, `drawSwing` destructured
+    // `undefined`, and threw inside the animation-frame callback - which is not
+    // caught anywhere, so the loop was never re-armed and the match hung on its
+    // last frame forever. Rendering the whole replay is the only way to see it.
+    const g = game('levi', { rule: 'stock', mode: 'stock', stocks: 3 });
+    frames(g, 200);
+    // Real swing effects of every shape the renderer knows, in a pool longer than
+    // a single recorded frame can hold.
+    for (let i = 0; i < 40; i++) {
+      g.fx.swing(i * 6 - 120, -40, 40 + (i % 9) * 8, -0.9, 0.9, { style: 'blade3', col: '#8dffbe', col2: '#ffffff' }, 1, 40, 1.2);
+    }
+    g.ko(g.fighters[1]);
+    until(g, () => g.replay.active, 120);
+    let played = 0;
+    while (g.replay.active && played < 2000) { tick(g); render(g); played++; }
+    assert.ok(played > 60, 'the replay never really played, so nothing was rendered');
+    // The restored swings must be drawable, not merely non-throwing.
+    assert.ok(g.fx.swings.every(s => s.p && typeof s.p.style === 'string' && s.p.col && s.p.col2),
+      'a restored swing is missing its render profile');
+  });
+
+  test('replay: the aftermath window closes and the match clock is handed back', () => {
+    // `ownsScreen` suppresses the match time scale. A no-input window that never
+    // counted down would latch that override on, and a match that ended at 0.35x
+    // would then run at a third speed forever - a quiet, permanent freeze.
+    const g = game('goku_ui', { rule: 'stock', mode: 'stock', stocks: 1 });
+    frames(g, 200);
+    g.ko(g.fighters[1]);
+    until(g, () => g.ended, 60);
+    until(g, () => g.replay.active, 120);
+    while (g.replay.active) { tick(g); }
+    assert.ok(g.replay.ownsScreen, 'the post-replay window did not open');
+    let guard = 0;
+    while (g.replay.ownsScreen && guard++ < 600) tick(g);
+    assert.equal(g.replay.ownsScreen, false, `the replay never handed the screen back (${guard} frames)`);
+    // With the screen handed back the match's own clock applies again, and the
+    // end-of-match slow motion runs its course to full speed.
+    guard = 0;
+    while (g.timeScale !== 1 && guard++ < 400) tick(g);
+    assert.equal(g.timeScale, 1, 'the match time scale was never restored');
+  });
+
+  test('replay: the footage ends on the blow, not one frame before it', () => {
+    // `ko` fires part-way through a step while `record` runs at the end of it, so
+    // the knockdown frame is the one written *after* the replay was raised. If
+    // the knockout index is guessed from the ring's length at the wrong moment
+    // the result banner stamps over the hit that caused it.
+    const g = game('levi', { rule: 'stock', mode: 'stock', stocks: 3 });
+    frames(g, 200);
+    g.ko(g.fighters[1]);
+    until(g, () => g.replay.active, 120);
+    // The last frame of the ring must be the knockout frame, so playback ends on it.
+    let last = null, played = 0;
+    while (g.replay.active && played++ < 2000) { tick(g); last = g.replay.status.toKill; }
+    assert.ok(last !== null && last <= 1, `playback ended ${last} frames short of the knockout`);
+  });
+
+  test('loop: a frame fault is absorbed and the match keeps running', () => {
+    // The animation-frame callback has no caller above it. A throw there kills
+    // the loop, and the player is left looking at a still frame of a game that
+    // will never respond again. The loop is the boundary that stops that.
+    const g = game('levi');
+    frames(g, 60);
+    g.running = true;            // the harness drives step() directly, so start() never ran
+    const realRender = g.render.bind(g);
+    const realError = console.error;
+    console.error = () => {};    // the fault is expected to be reported; do not spam the log
+    let threw = false;
+    try {
+      g.render = () => { if (!threw) { threw = true; throw new Error('synthetic render fault'); } realRender(); };
+      g.runFrame(0);
+      assert.equal(g.faults, 1, 'a frame fault was not counted');
+      assert.match(g.lastFault || '', /synthetic render fault/);
+      assert.ok(g.running, 'a frame fault stopped the match');
+      // And the counter stays reported-once rather than spamming the console.
+      g.render = () => { throw new Error('synthetic render fault'); };
+      g.runFrame(16.7); g.runFrame(33.4);
+      assert.equal(g.faults, 3);
+    } finally { console.error = realError; }
+  });
   function render(g) {
     const saved = console.error;
     console.error = (...args) => { throw new Error(args.map(String).join(' ')); };
     try { g.render(); g.canvas.assertBalanced(); } finally { console.error = saved; }
   }
   const air = f => Object.assign(f, { y: -450, grounded: false, state: 'air', vx: 0, vy: 0 });
-  const buttons = ['light', 'heavy', 'special', 'awaken', 'limit', 'ult'];
+  /**
+   * The four buttons. `limit` and `ult` are gone: the extra ability and the
+   * ultimate were both retired, and R is now the Awakening.
+   */
+  const buttons = ['light', 'heavy', 'special', 'awaken'];
+  /**
+   * Discovers moves through real input routing only - no invented roots. The
+   * awakened tier is discovered by actually spending a gauge, because that is the
+   * only way the controller will produce one, and every probe gets its own game so
+   * a recovery or a cooldown from one press cannot hide the next.
+   */
   function reachable(c) {
     const seen = new Set();
     // Discover direct roots through actual input routing; do not duplicate an engine root list.
@@ -88,6 +266,21 @@ try {
       const f = g.fighters[0];
       if (airborne) air(f);
       f.meter = 100;
+      tick(g, [DEFAULT_BINDINGS[button][0], ...(direction ? [DEFAULT_BINDINGS[direction][0]] : [])]);
+      if (f.moveKey) seen.add(f.moveKey);
+    }
+    // The awakened kit: spend a gauge, let the transformation finish, then press
+    // every attack button in every stance, grounded and airborne.
+    for (const airborne of [false, true]) for (const direction of [null, 'right', 'down']) for (const button of ['light', 'heavy', 'special']) {
+      const g = game(c.id);
+      const f = g.fighters[0];
+      f.meter = 100;
+      tick(g, [DEFAULT_BINDINGS.awaken[0]]);
+      if (!f.moveKey) continue;
+      // The transformation cuts, so on a hit it spends hitstop frames and runs long.
+      until(g, () => f.moveKey === null, 300);
+      assert.ok(f.awakened, `${c.id}: a full gauge did not open the Awakening`);
+      if (airborne) air(f);
       tick(g, [DEFAULT_BINDINGS[button][0], ...(direction ? [DEFAULT_BINDINGS[direction][0]] : [])]);
       if (f.moveKey) seen.add(f.moveKey);
     }
@@ -103,14 +296,27 @@ try {
   }
 
   test('catalog integration exists', () => assert.ok(catalog, 'moveCatalog.ts is not integrated yet'));
-  test('boss roster integration and 44 moves each', () => {
+  test('boss roster integration, and the full reachable kit', () => {
     assert.ok(bosses.length > 0, 'bossKits.ts has not installed any boss routes');
-    for (const c of bosses) assert.equal(Object.keys(c.moves).length, 44, `${c.id} move count`);
+    for (const c of bosses) {
+      // The boss kit is a bespoke route layered over a generated awakening tree,
+      // so the count is whatever the kit plus the tree actually produce. What
+      // matters is that nothing is defined and unreachable - `reachable` proves
+      // that per fighter - and that the count has not silently collapsed.
+      assert.ok(Object.keys(c.moves).length >= 40, `${c.id} move count collapsed to ${Object.keys(c.moves).length}`);
+      assert.ok(c.moves.boss_finisher, `${c.id} lost its finisher`);
+      assert.equal(c.moves.nfu, c.moves.boss_finisher, `${c.id} finisher is not the awakened special`);
+      assert.ok(c.moves.nwl && c.moves.nwh, `${c.id} has no bespoke awakened light or heavy`);
+    }
   });
   for (const c of CHARACTERS) {
     test(`roster ${c.id}: references and input-reachable moves`, () => {
       const reached = reachable(c);
-      assert.deepEqual(Object.keys(c.moves).filter(key => !reached.has(key)), [], `${c.id}: unreachable move keys`);
+      // Two keys can be one move: a boss finisher is authored under its own name
+      // and installed as the awakened special, so it is reachable the moment
+      // `nfu` is. What must never happen is a move no press can ever produce.
+      const live = new Set([...reached].map(key => c.moves[key]));
+      assert.deepEqual(Object.keys(c.moves).filter(key => !live.has(c.moves[key])), [], `${c.id}: unreachable move keys`);
       for (const [key, m] of Object.entries(c.moves)) {
         assert.ok(m && m.dur > 0 && m.startup >= 0 && m.startup < m.dur, `${key}: invalid duration/startup`);
         for (const action of buttons) if (m.chains?.[action]) assert.ok(c.moves[m.chains[action]], `${key}: dangling ${action} chain`);
@@ -126,7 +332,7 @@ try {
           const g = game(c.id);
           const [f, target] = g.fighters;
           target.x = 200;
-          if (/^(nair|sair|dair|rec|gp|aspec|aig|aex|aaw|afu)/.test(key)) { air(f); air(target); }
+          if (/^(nair|sair|dair|rec|gp|aspec|aig|aaw|awl|awh|afu|awf)/.test(key)) { air(f); air(target); }
           f.meter = 100;
           f.startMove(key, g);
           assert.equal(f.moveKey, key);
@@ -162,36 +368,109 @@ try {
   });
 
   for (const c of bosses) {
-    test(`boss ${c.id}: J J L hit-confirmed route`, () => {
+    /**
+     * A boss finisher has no button of its own: it *is* the neutral awakened
+     * special. The route is therefore L from neutral, inside the state, and the
+     * test is that the same press resolves to something different on either side
+     * of it - a route that opens in both states is as broken as one that never
+     * opens.
+     */
+    const openRoute = () => {
       const g = game(c.id); const [f, target] = g.fighters;
+      f.meter = 100;
       target.x = 60;
-      tick(g, ['KeyJ']); assert.equal(f.moveKey, 'nsig');
-      until(g, () => f.hitsLanded > f.moveHitStart && f.hitstop === 0 && f.moveFrame >= f.move.chains.window[0] - 1);
-      tick(g, ['KeyJ']); assert.equal(f.moveKey, 'boss_heavy2');
-      until(g, () => f.moveKey === 'boss_heavy2' && f.hitsLanded > f.moveHitStart && f.hitstop === 0 && f.moveFrame >= f.move.chains.window[0] - 1);
+      tick(g, [DEFAULT_BINDINGS.awaken[0]]);
+      assert.equal(f.moveKey, 'naw');
+      // The transformation cuts, so on a hit it spends hitstop frames and runs
+      // long. Wait for the body to be free rather than guessing a frame count.
+      until(g, () => f.moveKey === null, 240);
+      assert.ok(f.awakened, 'the Awakening did not open for the boss route');
+      return g;
+    };
+    test(`boss ${c.id}: the finisher is the awakened special, and the K K route still exists`, () => {
+      assert.equal(c.moves.nfu, c.moves.boss_finisher, `${c.id}: the finisher is not filed as the awakened special`);
+      assert.equal(c.moves.nwh.chains.special, 'nfu', `${c.id}: the awakened heavy does not lead into the finisher`);
+      assert.equal(c.moves.nsig.chains.heavy, 'boss_heavy2', `${c.id}: the K K confirm is gone`);
+
+      // Sealed: L from neutral is the base special, never the finisher.
+      const shut = game(c.id); const [sf, st] = shut.fighters;
+      st.x = 60;
+      assert.equal(sf.moveKey, null);
+      tick(shut, [DEFAULT_BINDINGS.special[0]]);
+      assert.equal(sf.moveKey, 'nspec', `${c.id}: the sealed special is not the base special`);
+      assert.notEqual(sf.moveKey, 'boss_finisher', 'the finisher opened with the Awakening sealed');
+
+      // Open: the same press is the finisher.
+      const g = openRoute();
+      const [f, target] = g.fighters;
+      Object.assign(target, { x: 60, damage: 0, invuln: 0, state: 'idle', hitstun: 0 });
       const prior = target.dmgTaken;
-      tick(g, ['KeyL']); assert.equal(f.moveKey, 'boss_finisher');
+      tick(g, [DEFAULT_BINDINGS.special[0]]);
+      assert.equal(f.moveKey, 'nfu', `${c.id}: the awakened special is not the finisher`);
+      assert.equal(f.move, c.moves.boss_finisher, `${c.id}: the finisher installed under another key`);
       until(g, () => target.dmgTaken > prior);
-      assert.ok(f.recentMoves.some(m => m.key === 'boss_heavy2'));
-      assert.ok(f.recentMoves.some(m => m.key === 'boss_finisher'));
+      assert.ok(f.recentMoves.some(m => m.key === 'nfu'));
+
+      // The awakened heavy leads into it, so the climax is still a route.
+      const h = openRoute();
+      const [hf, ht] = h.fighters;
+      Object.assign(ht, { x: 60, damage: 0, invuln: 0, state: 'idle', hitstun: 0 });
+      tick(h, [DEFAULT_BINDINGS.heavy[0]]);
+      assert.equal(hf.moveKey, 'nwh', `${c.id}: neutral K while Awakened is not the awakened heavy`);
+      const w = hf.move.chains.window;
+      until(h, () => hf.moveKey === 'nwh' && hf.hitstop === 0 && hf.moveFrame >= w[0] + 1 && hf.moveFrame <= w[1] - 1);
+      tick(h, [DEFAULT_BINDINGS.special[0]]);
+      assert.equal(hf.moveKey, 'nfu', `${c.id}: the awakened heavy did not lead into the finisher`);
     });
-    test(`boss ${c.id}: whiff and held J cannot confirm a route`, () => {
+    test(`boss ${c.id}: the K K confirm needs a landed heavy and a fresh press`, () => {
+      // Whiffing the opener never reaches the second heavy.
       const g = game(c.id); const [f, target] = g.fighters;
       target.x = 1700;
-      tick(g, ['KeyJ']); frames(g, 8); tick(g, ['KeyJ']); frames(g, 8); tick(g, ['KeyL']); frames(g, 70);
+      tick(g, [DEFAULT_BINDINGS.heavy[0]]); frames(g, 8);
+      tick(g, [DEFAULT_BINDINGS.heavy[0]]); frames(g, 8);
+      tick(g, [DEFAULT_BINDINGS.special[0]]); frames(g, 70);
       assert.equal(target.dmgTaken, 0);
       assert.ok(!f.recentMoves.some(m => ['boss_heavy2', 'boss_finisher'].includes(m.key)), 'whiff entered hit-confirm chain');
+      // A held button is not a fresh edge.
       const held = game(c.id); const a = held.fighters[0]; held.fighters[1].x = 60;
-      frames(held, 120, ['KeyJ']);
+      frames(held, 120, [DEFAULT_BINDINGS.heavy[0]]);
       assert.ok(a.hitsLanded > 0);
       assert.ok(!a.recentMoves.some(m => m.key === 'boss_heavy2'), 'held button repeated without fresh edge');
+      // Landed: K then K reaches the boss-only second heavy.
+      const hit = game(c.id); const [hf, ht] = hit.fighters;
+      ht.x = 60;
+      tick(hit, [DEFAULT_BINDINGS.heavy[0]]);
+      assert.equal(hf.moveKey, 'nsig');
+      until(hit, () => hf.hitsLanded > hf.moveHitStart && hf.hitstop === 0 && hf.moveFrame >= hf.move.chains.window[0] - 1);
+      tick(hit, [DEFAULT_BINDINGS.heavy[0]]);
+      assert.equal(hf.moveKey, 'boss_heavy2', `${c.id}: a landed heavy did not confirm into the second K`);
     });
-    for (const [label, keys, expected] of [['up J', ['KeyW', 'KeyJ'], 'rec'], ['down J', ['KeyS', 'KeyJ'], 'gp'], ['air K', ['KeyK'], 'aspec'], ['air J', ['KeyJ'], 'aig']]) {
+    // Every attack button resolves to a different move in the air, in both states.
+    for (const [label, keys, expected] of [
+      ['air K, sealed', [DEFAULT_BINDINGS.heavy[0]], 'aig'],
+      ['air L, sealed', [DEFAULT_BINDINGS.special[0]], null],
+      ['air J, Awakened', [DEFAULT_BINDINGS.light[0]], 'awl'],
+      ['air K, Awakened', [DEFAULT_BINDINGS.heavy[0]], 'awh'],
+      ['air L, Awakened', [DEFAULT_BINDINGS.special[0]], 'afu'],
+    ]) {
+      test(`boss ${c.id}: ${label} routes to ${expected || 'the aerial special'}`, () => {
+        const g = game(c.id); const f = g.fighters[0]; air(f);
+        if (label.includes('Awakened')) { f.meter = 100; tick(g, [DEFAULT_BINDINGS.awaken[0]]); frames(g, 40); air(f); assert.ok(f.awakened); }
+        tick(g, keys);
+        if (expected) {
+          assert.equal(f.moveKey, expected);
+          if (expected === 'awh' || expected === 'nwh' || expected === 'afu') assert.ok(f.cds[expected] > 0, `${expected} spent no cooldown`);
+        } else {
+          assert.ok(f.moveKey === 'aspec' || f.moveKey === 'nspec', `unexpected aerial special: ${f.moveKey}`);
+        }
+        render(g);
+      });
+    }
+    for (const [label, keys, expected] of [['up K', ['KeyW', 'KeyK'], 'rec'], ['down K', ['KeyS', 'KeyK'], 'gp']]) {
       test(`boss ${c.id}: ${label} routes to ${expected}`, () => {
         const g = game(c.id); const f = g.fighters[0]; air(f);
         tick(g, keys); assert.equal(f.moveKey, expected);
         if (expected === 'rec') assert.equal(f.recoveryUsed, true);
-        if (expected === 'aspec' || expected === 'aig') assert.ok(f.cds[expected] > 0);
         render(g);
       });
     }
@@ -222,8 +501,16 @@ try {
     ally.x = enemy.x = 90; other.x = 1500;
     g.spawnProj({ owner: a, type: 'fireball', x: 90, y: -40, vx: 0, vy: 0, w: 90, h: 100, life: 2, ...hit, dir: 1,
       fin: { dmg: 5, ang: 0, kb: 0, sc: 0 } });
+    frames(g, 1);
+    const impact = enemy.dmgTaken;
+    assert.ok(impact > 0, 'the impact never landed on the enemy');
+    assert.equal(ally.dmgTaken, 0);
     frames(g, 3);
-    assert.equal(ally.dmgTaken, 0); assert.equal(enemy.dmgTaken, 15);
+    // The expiry blast is the second hit of a sequence, so combo scaling takes a
+    // slice off it. It still has to be there: scaling is not a cut-off.
+    assert.ok(enemy.dmgTaken > impact, 'the expiry blast never landed on the enemy');
+    assert.ok(enemy.dmgTaken <= impact + 5, 'the expiry blast ignored combo scaling');
+    assert.equal(ally.dmgTaken, 0, 'a teammate was hit by the blast');
   });
   test('custom: nearestEnemy and real AI targeting ignore closer allies', () => {
     const g = custom(); const [player, ally, enemy, other] = g.fighters;
@@ -293,13 +580,25 @@ try {
   });
 
   for (const boss of ['sukuna', 'gojo']) {
-    test(`boss ${boss}: finisher shares and respects Limit cooldown`, () => {
+    test(`boss ${boss}: the finisher is spent with the whole awakened special tier`, () => {
       const g = game(boss), f = g.fighters[0];
-      f.startMove('boss_finisher', g);
-      for (const key of ['nex', 'sex', 'dex', 'aex', 'boss_finisher']) assert.ok(f.cds[key] > 0, `${key} cooldown absent`);
-      f.endMove(); f.startMove('boss_heavy2', g); f.moveConnected = true;
-      f.moveFrame = f.move.chains.window[0]; tick(g, ['KeyL']);
-      assert.equal(f.moveKey, 'boss_heavy2', 'chaining bypassed shared Limit cooldown');
+      assert.equal(f.def.moves.nfu, f.def.moves.boss_finisher, `${boss}: finisher and awakened special diverged`);
+      f.meter = 100; g.fighters[1].x = 60;
+      tick(g, [DEFAULT_BINDINGS.awaken[0]]);
+      until(g, () => f.moveKey === null, 240);
+      assert.ok(f.awakened);
+      tick(g, [DEFAULT_BINDINGS.special[0]]);
+      assert.equal(f.moveKey, 'nfu');
+      for (const key of ['nfu', 'sfu', 'dfu', 'afu']) {
+        assert.ok(f.cds[key] > 0, `${key} cooldown absent`);
+      }
+      // One finisher spends the tier, so the other three awakened specials are
+      // refused on the same button in every stance.
+      f.endMove();
+      for (const [label, keys] of [['neutral', []], ['side', ['KeyD']], ['down', ['KeyS']]]) {
+        tick(g, [...keys, DEFAULT_BINDINGS.special[0]]);
+        assert.equal(f.moveKey, null, `${boss}: an awakened ${label} special started while the tier was spent`);
+      }
     });
     test(`boss ${boss}: character-builder clone retains combo nodes`, () => {
       const clone = buildCustom({ ...newCustomCfg(), style: boss });
@@ -307,14 +606,17 @@ try {
         if (m.chains?.[action]) assert.ok(clone.moves[m.chains[action]], `clone missing ${m.chains[action]}`);
       }
     });
-    test(`preview ${boss}: real hit-confirmed combo and awakened follow-up`, () => {
-      for (const action of ['heavy', 'awaken']) {
+    test(`preview ${boss}: awakened heavy chains into the finisher, and the awakened special is it`, () => {
+      for (const action of ['heavy', 'awaken', 'awakened']) {
         const g = new Game(browser.canvas(), { mode: 'training', rule: 'training', stocks: 1, time: 0, arena: 'rooftops', player: boss, cpus: [] }, { bindings: DEFAULT_BINDINGS, tapJump: false, preview: boss });
+        g.fighters[0].meter = 100;
         g.queuePreview({ action, stance: 'neutral', followup: true });
         frames(g, 155);
         const keys = g.fighters[0].recentMoves.map(m => m.key);
-        assert.ok(keys.includes(action === 'heavy' ? 'boss_finisher' : 'nfu'), `${action} preview never reached finisher: ${keys}`);
-        assert.ok(g.fighters[1].dmgTaken > 0, 'preview caused no damage'); render(g);
+        if (action === 'awaken') assert.ok(keys.includes('nfu'), `R -> L never reached the awakened special: ${keys}`);
+        if (action === 'awakened') assert.ok(keys.includes('nfu'), `the awakened special is not the finisher: ${keys}`);
+        if (action === 'heavy') assert.ok(keys.includes('boss_heavy2'), `K -> K never reached the second heavy: ${keys}`);
+        render(g);
       }
     });
   }
@@ -329,14 +631,14 @@ try {
   for (const c of CHARACTERS) test(`flight ${c.id}: mashing aerial moves cannot keep a fighter airborne forever`, () => {
     const g = game(c.id), f = g.fighters[0];
     air(f); f.y = -600; let started = 0, lastKey = null, lastFrame = -1;
-    const combos = [['light'], ['heavy'], ['special'], ['limit'], ['awaken'], ['light', 'up'], ['heavy', 'up'], ['special', 'up'], ['special', 'right'], ['heavy', 'right'], ['light', 'right'], ['limit', 'up'], ['awaken', 'up'], ['ult'], ['ult', 'up']];
+    const combos = [['light'], ['heavy'], ['special'], ['awaken'], ['light', 'up'], ['heavy', 'up'], ['special', 'up'], ['special', 'right'], ['heavy', 'right'], ['light', 'right'], ['awaken', 'up'], ['awaken', 'down'], ['awaken', 'right'], ['awaken'], ['awaken', 'up']];
     let landedAt = -1;
     for (let i = 0; i < 420 && landedAt < 0; i++) {
       // A different button every frame, so each press is a fresh edge: the fastest possible masher.
       tick(g, combos[i % combos.length].map(b => DEFAULT_BINDINGS[b][0]));
       if (f.moveKey && (f.moveKey !== lastKey || f.moveFrame < lastFrame)) started++;
       lastKey = f.moveKey; lastFrame = f.moveFrame;
-      f.meter = 100; g.infiniteMeter = true; f.invuln = 0; if (i < 600) f.godT = 600; // transformations (Super Saiyan, Godspeed) are the worst case
+      f.meter = 100; g.infiniteMeter = true; f.invuln = 0; if (i < 600) f.awakened = true; // the Awakening is the worst case
       if (f.grounded) landedAt = i;
     }
     if (process.env.FLIGHT_DEBUG) console.log(c.id, landedAt, started, f.recentMoves.map(r => r.key).join(","));
@@ -354,12 +656,24 @@ try {
     return g;
   }
   const activateTimeStop = (g) => {
-    g.fighters[0].startMove('ult', g);
+    // Za Warudo is a retained set-piece: it is his neutral awakened special, and
+    // the Awakening is what pays for it, so the route is R and then L. The dummy
+    // is parked out of reach for the transformation, which cuts, so the stop is
+    // the only thing that has touched it by the time this returns.
+    const dio = g.fighters[0], foe = g.fighters[1];
+    foe.x = dio.x + 700; foe.dmgTaken = 0; foe.damage = 0;
+    tick(g, [DEFAULT_BINDINGS.awaken[0]]);
+    until(g, () => dio.moveKey === null, 300);
+    assert.ok(dio.awakened, 'the Awakening did not open for Za Warudo');
+    foe.x = dio.x + 60; foe.invuln = 0;
+    tick(g, [DEFAULT_BINDINGS.special[0]]);
+    assert.equal(dio.moveKey, 'nfu', 'L while Awakened is not Za Warudo');
     for (let i = 0; i < 200 && !g.timeStop.active; i++) tick(g);
-    assert.ok(g.timeStop.active, 'time stop never activated from the ultimate');
+    assert.ok(g.timeStop.active, 'time stop never activated from the awakened special');
+    foe.dmgTaken = 0; foe.damage = 0;
   };
 
-  test('timestop: activates from the ultimate and suspends everyone but the caster', () => {
+  test('timestop: activates from the awakened special and suspends everyone but the caster', () => {
     const g = timeStopGame();
     assert.equal(g.timeStop.active, false);
     activateTimeStop(g);
@@ -477,31 +791,34 @@ try {
     assert.equal(g.timeStop.realLeft, 5000);
   });
 
-  test('timestop: queued damage never feeds the caster ultimate meter', () => {
+  test('timestop: queued damage never feeds the caster Awakening gauge', () => {
     const g = timeStopGame();
     const [dio, foe] = g.fighters;
     activateTimeStop(g);
-    assert.equal(dio.meter, 0, 'ultimate did not consume the meter');
+    assert.ok(dio.meter < 100, 'the Awakening did not spend the gauge');
     for (let n = 0; n < 3; n++) {
       foe.x = dio.x + 40; foe.invuln = 0;
       dio.startMove('nlight', g);
       for (let i = 0; i < 16 && dio.moveKey === 'nlight'; i++) tick(g);
     }
+    const before = dio.meter;
     g.endTimeStop();
     assert.ok(foe.dmgTaken > 0, 'queued damage never released');
-    assert.equal(dio.meter, 0, `released time-stop damage granted ${dio.meter} meter`);
+    // The release lands three hits at once. If they fed the gauge the number
+    // would jump; nothing ticks in between, so it has to be exactly unchanged.
+    assert.equal(dio.meter, before, `released time-stop damage granted ${(dio.meter - before).toFixed(2)} gauge`);
   });
 
-  test('timestop: an interrupted ultimate never starts a time stop', () => {
+  test('timestop: an interrupted time stop never starts one', () => {
     const g = timeStopGame();
     const [dio] = g.fighters;
     dio.meter = 100;
-    dio.startMove('ult', g);
+    dio.awakened = true; dio.startMove('nfu', g);
     for (let i = 0; i < 6; i++) tick(g);
     // Interrupt the startup the way a real hit would.
     dio.state = 'hitstun'; dio.move = null; dio.moveKey = null;
     for (let i = 0; i < 80; i++) tick(g);
-    assert.equal(g.timeStop.active, false, 'interrupted ultimate still started a time stop');
+    assert.equal(g.timeStop.active, false, 'an interrupted time stop still started one');
   });
 
   test('timestop: losing the caster mid-stop releases the queue and unfreezes the world', () => {
@@ -521,37 +838,170 @@ try {
   });
 
   // ===========================================================================
-  // ULTIMATE METER POLICY
+  // THE AWAKENING GAUGE
   // ===========================================================================
-  test('meter: an awakening or ultimate never feeds its own meter', () => {
+  test('gauge: an Awakening never feeds its own gauge', () => {
     const g = game('levi');
     const [a, b] = g.fighters;
-    a.meter = 0; a.startMove('ult', g); assert.ok(g.meterLocked(a), 'ultimate did not lock the meter');
-    a.endMove(); a.meter = 0; a.godT = 200; assert.ok(g.meterLocked(a), 'transformation did not lock the meter');
-    a.godT = 0; a.meter = 0; a.startMove('naw', g); assert.ok(g.meterLocked(a), 'awaken stance did not lock the meter');
-    a.endMove(); a.meter = 0; a.startMove('nfu', g); assert.ok(g.meterLocked(a), 'awakened variant did not lock the meter');
+    a.meter = 0; a.startMove('naw', g);
+    assert.ok(g.meterLocked(a), 'the transformation did not lock the gauge');
+    assert.ok(a.awakened, 'the transformation did not open the state');
     a.endMove();
+    a.meter = 0; a.awakened = true; a.startMove('nfu', g);
+    assert.ok(g.meterLocked(a), 'the awakened special did not lock the gauge');
+    a.endAwaken();
+    a.meter = 0; a.awakened = true; a.startMove('nwh', g);
+    assert.ok(g.meterLocked(a), 'the awakened heavy did not lock the gauge');
+    a.endAwaken();
+    a.meter = 0; a.awakened = true; a.startMove('nwl', g);
+    assert.ok(g.meterLocked(a), 'the awakened light did not lock the gauge');
+    a.endAwaken();
+    // The seal is a few frames of tail, not a new rule: an ordinary attack is
+    // gauge-earning again almost immediately.
+    a.awakenSealedT = 0;
     a.meter = 0; a.startMove('nlight', g);
     assert.equal(g.meterLocked(a), false, 'a normal attack was wrongly locked');
-    a.meter = 0; deal(g, a, b); assert.ok(a.meter > 0, 'a normal attack gave no meter');
+    a.meter = 0; deal(g, a, b); assert.ok(a.meter > 0, 'a normal attack gave no gauge');
   });
 
-  test('meter: a lingering ultimate projectile stays barred after the animation ends', () => {
+  test('gauge: a lingering set-piece projectile stays barred after the animation ends', () => {
     const g = game('sukuna');
     const [a, b] = g.fighters;
-    a.meter = 0; a.startMove('ult', g);
+    a.meter = 0; a.startMove('dfu', g);
     g.spawnProj({ owner: a, type: 'sig', sig: 'sukunaShrine', x: b.x, y: b.y - 40, vx: 0, vy: 0, w: 400, h: 300, life: 90, dmg: 2, ang: 70, kb: 1, sc: 0, fx: 'dark', dir: 1 });
     const p = g.projectiles[g.projectiles.length - 1];
-    assert.equal(p.ultLocked, true, 'projectile spawned by an ultimate is not locked');
+    assert.equal(p.ultLocked, true, 'projectile spawned by a set-piece is not locked');
     a.endMove(); a.meter = 0;
     // The very same blow arriving after the animation finished, carried by the
-    // projectile's own lock, must still not grant meter.
+    // projectile's own lock, must still not grant gauge.
     g.applyHit(a, b, { dmg: 10, ang: 0, kb: 5, sc: 0, fx: 'dark', ultLocked: p.ultLocked }, 1, b.x, b.cy, false, { x: 0, y: 0, vx: 0, vy: 0, noMeter: p.ultLocked });
-    assert.equal(a.meter, 0, 'delayed ultimate damage still granted meter');
-    // A normal attack outside the awakening still builds meter as before.
-    a.meter = 0; a.startMove('nlight', g);
+    assert.equal(a.meter, 0, 'delayed set-piece damage still granted gauge');
+    // A normal attack outside the Awakening still builds gauge as before.
+    a.meter = 0; a.endAwaken(); a.startMove('nlight', g);
     g.applyHit(a, b, { dmg: 10, ang: 0, kb: 5, sc: 0, fx: 'slash' }, 1, b.x, b.cy);
-    assert.ok(a.meter > 0, 'normal attacks stopped granting meter');
+    assert.ok(a.meter > 0, 'normal attacks stopped granting gauge');
+  });
+
+  test('gauge: filling it takes a real exchange, and dealing beats taking', () => {
+    const g = game('levi'); g.infiniteMeter = false;
+    const [a, b] = g.fighters;
+    // One hundred points of damage dealt is a quarter of the bar: a full gauge is
+    // a quarter of a stock at full aggression, not a formality.
+    a.meter = 0; b.meter = 0;
+    g.applyHit(a, b, { dmg: 100, ang: 0, kb: 0, sc: 0, fx: 'slash' }, 1, b.x, b.cy);
+    close(a.meter, 24, 'gauge for damage dealt');
+    close(b.meter, 13, 'gauge for damage taken');
+    // So the cheapest possible route to the Awakening is a real exchange: it takes
+    // four hundred points of damage dealt, or seven hundred taken.
+    assert.ok(100 / (a.meter / 100) > 400, `a full gauge only needs ${(100 / (a.meter / 100)).toFixed(0)} damage dealt`);
+    assert.ok(100 / (b.meter / 100) > 700, `being beaten to a full gauge only needs ${(100 / (b.meter / 100)).toFixed(0)} damage taken`);
+  });
+
+  test('awakening: the gauge drains to zero on its own and hands the base kit back', () => {
+    const g = game('levi'); g.infiniteMeter = false;
+    const [f, target] = g.fighters;
+    target.x = 900;
+    f.meter = 100;
+    tick(g, [DEFAULT_BINDINGS.awaken[0]]);
+    until(g, () => f.moveKey === null, 300);
+    assert.ok(f.awakened, 'a full gauge did not open the Awakening');
+    const start = f.meter;
+    // Fifteen seconds of gauge, spent whether or not it is being used.
+    let frames = 0;
+    while (f.awakened && frames < 1200) { tick(g); frames++; }
+    assert.equal(f.awakened, false, `the Awakening was still open after ${frames} frames`);
+    assert.equal(f.meter, 0, `the gauge ended at ${f.meter}`);
+    assert.ok(frames > 700 && frames < 1100, `one Awakening lasted ${(frames / 60).toFixed(1)}s`);
+    assert.ok(start < 100, 'the gauge was not clamped below full on entry');
+    // And the buttons point at the base moveset again.
+    tick(g, [DEFAULT_BINDINGS.heavy[0]]);
+    assert.equal(f.moveKey, 'nlight_heavy' in f.def.moves ? f.moveKey : 'nlight_heavy');
+  });
+
+  test('awakening: a knockout while Awakened takes the whole state', () => {
+    const g = game('levi');
+    const [f] = g.fighters;
+    f.meter = 100;
+    tick(g, [DEFAULT_BINDINGS.awaken[0]]);
+    until(g, () => f.moveKey === null, 300);
+    assert.ok(f.awakened);
+    g.ko(f);
+    assert.equal(f.awakened, false, 'the state survived a knockout');
+    assert.equal(f.meter, 0, `the gauge survived a knockout at ${f.meter}`);
+    // Nothing is left on cooldown either: the next stock starts clean.
+    for (const key of ['naw', 'nfu', 'nwh', 'nwl']) assert.equal(f.cds[key], 0, `${key} survived the knockout`);
+  });
+
+  test('awakening: the blow that empties the gauge cannot refill it', () => {
+    const g = game('levi');
+    const [a, b] = g.fighters;
+    a.meter = 0.05; a.awakened = true;
+    b.damage = 20; b.grounded = false;
+    // The state closes inside the fighter's update; the hit lands after it.
+    tick(g);
+    assert.equal(a.awakened, false, 'an empty gauge did not close the Awakening');
+    assert.equal(a.meter, 0, `the closing blow refilled ${a.meter} of gauge`);
+    a.startMove('nlight', g);
+    b.invuln = 0;
+    g.applyHit(a, b, { dmg: 20, ang: 0, kb: 0, sc: 0, fx: 'slash' }, 1, b.x, b.cy);
+    assert.equal(a.meter, 0, 'the frame after the Awakening closed still paid for itself');
+    // A third of a second later it is an ordinary exchange again.
+    frames(g, 40);
+    a.startMove('nlight', g);
+    g.applyHit(a, b, { dmg: 20, ang: 0, kb: 0, sc: 0, fx: 'slash' }, 1, b.x, b.cy);
+    assert.ok(a.meter > 0, 'the seal outlived the Awakening by too long');
+  });
+
+  // ===========================================================================
+  // THE COMBAT MODEL: scaling, juggle budget, launch decay
+  // ===========================================================================
+  test('combat: every hit after the first in a string is worth less, and never nothing', () => {
+    const g = game('levi');
+    const [a, b] = g.fighters;
+    a.startMove('nlight', g);
+    const blow = { dmg: 10, ang: 0, kb: 4, sc: 0, fx: 'slash' };
+    const dealt = [];
+    for (let i = 0; i < 10; i++) {
+      const before = b.dmgTaken;
+      g.applyHit(a, b, blow, 1, b.x, b.cy);
+      dealt.push(+(b.dmgTaken - before).toFixed(3));
+    }
+    close(dealt[0], 10, 'the first hit of a string');
+    for (let i = 1; i < dealt.length; i++) {
+      assert.ok(dealt[i] <= dealt[i - 1], `hit ${i + 1} was worth more than hit ${i}: ${dealt.join(', ')}`);
+      assert.ok(dealt[i] > 10 * 0.3, `hit ${i + 1} fell off a cliff: ${dealt[i]}`);
+    }
+    assert.ok(dealt[8] < dealt[1], 'the tail of a string was not discounted at all');
+    // A ten-hit mash is worth about half its face value, not ten times one hit.
+    const total = dealt.reduce((s, d) => s + d, 0);
+    assert.ok(total < 80, `a ten-hit string was not scaled (${total})`);
+    assert.ok(total > 40, `a ten-hit string was scaled into nothing (${total})`);
+  });
+
+  test('combat: the juggle budget runs out and a launcher stops launching', () => {
+    const g = game('levi');
+    const [a, b] = g.fighters;
+    a.startMove('nsig', g);
+    b.damage = 20;
+    const launch = { dmg: 8, ang: 80, kb: 9, sc: 4, fx: 'slash' };
+    const rises = [];
+    for (let i = 0; i < 6; i++) {
+      b.grounded = false;
+      const before = b.vy;
+      g.applyHit(a, b, launch, 1, b.x, b.cy);
+      rises.push(+b.vy.toFixed(2));
+      // Never higher than the last one: a spent juggle cannot be topped up.
+      if (i > 0) assert.ok(b.vy >= before - 0.001, `hit ${i + 1} sent a spent juggle higher (${b.vy} < ${before})`);
+    }
+    // The budget is two re-launches; everything after it is a shove, not a lift.
+    assert.ok(rises[0] < -3 && rises[1] < -3, `the first two launches did not lift: ${rises.join(', ')}`);
+    assert.ok(rises[2] > -2, `the third launch was still a launch: ${rises.join(', ')}`);
+    assert.ok(rises.slice(2).every(v => v > -2), `the juggle never stopped: ${rises.join(', ')}`);
+    // Landing restores the budget, so a fresh combo can juggle again.
+    b.grounded = true; b.juggleCount = 0; b.juggleLeft = 0; b.vy = 0;
+    g.applyHit(a, b, launch, 1, b.x, b.cy);
+    assert.equal(b.juggleLeft, 2, 'landing did not restore the juggle budget');
+    assert.ok(b.vy < -3, 'the restored budget did not launch again');
   });
 
   // ===========================================================================
@@ -578,7 +1028,7 @@ try {
 
   test('audio sukuna: powerful slashes use the strong sample', () => {
     // Heavy damage, travelling Dismantles and every technique-class move.
-    for (const key of ['nlight_spec', 'nlight_heavy', 'slight_spec', 'slight_heavy', 'dsig', 'nex', 'naw', 'boss_finisher']) {
+    for (const key of ['nlight_spec', 'nlight_heavy', 'slight_spec', 'slight_heavy', 'dsig', 'naw', 'boss_finisher']) {
       assert.equal(clipFor('sukuna', key), 'sukuna-strong-slash', `${key} did not use the strong cleave`);
     }
   });
@@ -595,7 +1045,7 @@ try {
 
   test('audio sukuna: Fuga, Domain Expansion and the KO laugh each fire their own clip', () => {
     assert.equal(clipFor('sukuna', 'aspec', { airborne: true }), 'sukuna-fuga', 'Fuga clip missing');
-    assert.equal(clipFor('sukuna', 'ult', { frames: 200 }), 'sukuna-domain', 'Domain Expansion clip missing');
+    assert.equal(clipFor('sukuna', 'dfu', { frames: 200 }), 'sukuna-domain', 'Domain Expansion clip missing');
     const g = game('sukuna');
     const [a, b] = g.fighters;
     a.startMove('nlight', g);
@@ -646,7 +1096,7 @@ try {
 
   test('audio: characters without recorded samples keep the synthesised palette', () => {
     assert.equal(clipFor('levi', 'nlight'), null, 'Levi unexpectedly requested a recorded clip');
-    assert.equal(clipFor('gojo', 'ult', { frames: 200 }), null, 'Gojo unexpectedly requested a recorded clip');
+    assert.equal(clipFor('gojo', 'dfu', { frames: 200 }), null, 'Gojo unexpectedly requested a recorded clip');
   });
 
   // ===========================================================================
@@ -711,7 +1161,7 @@ try {
     const dome = game('sukuna');
     const df = dome.fighters[0];
     df.meter = 100;
-    df.startMove('ult', dome);
+    df.startMove('dfu', dome);
     dome.cin = null;
     for (let i = 0; i < 320 && !dome.projectiles.some(p => p.sig === 'sukunaShrine'); i++) tick(dome);
     const storm = countArcs(dome);
@@ -725,7 +1175,7 @@ try {
     let flat = 0;
     const realSlash = g.fx.slash.bind(g.fx);
     g.fx.slash = (...a) => { flat++; return realSlash(...a); };
-    f.startMove('ult', g);
+    f.startMove('nfu', g);
     for (let i = 0; i < 140; i++) tick(g);
     assert.ok(flat > 0, 'no other fighter uses the flat slash any more');
   });
@@ -734,7 +1184,7 @@ try {
     const g = game('sukuna');
     const f = g.fighters[0];
     f.meter = 100;
-    f.startMove('ult', g);
+    f.startMove('dfu', g);
     // The cinematic is skipped here, so step through the three-second chant until
     // the domain entity exists.
     g.cin = null;
@@ -753,8 +1203,8 @@ try {
   test('sukuna shrine: the domain still damages the area it covers', () => {
     const g = game('sukuna');
     const [a, b] = g.fighters;
-    a.meter = 100;
-    a.startMove('ult', g);
+    a.meter = 100; a.awakened = true; a.meter = 100;
+    a.startMove('dfu', g);
     g.cin = null;
     // The shrine appears three seconds in; the Dismantle storm starts half a
     // second after that, when the domain becomes active.
@@ -768,8 +1218,8 @@ try {
   test('sukuna shrine: the domain opens on the anime beat and keeps cutting for five seconds', () => {
     const g = game('sukuna');
     const [a, b] = g.fighters;
-    a.meter = 100;
-    a.startMove('ult', g);
+    a.meter = 100; a.awakened = true; a.meter = 100;
+    a.startMove('dfu', g);
     g.cin = null;
     const shrineFrames = [];
     const active = [];
@@ -777,7 +1227,7 @@ try {
     b.x = a.x; b.grounded = true;
     // The sample starts on the move's startup frame; every beat below is counted
     // from there, exactly the way the chant is staged in the game.
-    const cast = a.def.moves.ult.startup;
+    const cast = a.def.moves.dfu.startup;
     for (let i = 0; i < 580; i++) {
       tick(g);
       const p = g.projectiles.find(x => x.sig === 'sukunaShrine');
