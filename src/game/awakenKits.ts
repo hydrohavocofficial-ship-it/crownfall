@@ -140,7 +140,7 @@ const KITS: Record<string, Kit> = {
       dwl: ['Ember Sweep', 'A low sweeping arc that leaves embers on the floor.', melee(c('rengoku'), { anim: 'lowslash', x: 58, y: -14, w: 120, h: 34, blow: B(6, 76, 4.6, 3.2) })],
       awl: ['Falling Sun', 'Drops out of the air sword-first and bursts into flame on landing.', dive(c('rengoku'), { anim: 'slam', vx: 4, vy: 16, land: B(7, 72, 6, 5.6) })],
       nwh: ['Rising Flame Pillar', 'A column of fire erupts beneath the target.', eruption(c('rengoku'), { mode: 'target', w: 70, h: 210, delay: 10, blow: B(11, 86, 8.8, 8.8), big: true })],
-      swh: ['Flame Tiger Charge', 'A roaring tiger of flame lunges from his blade.', giant(c('rengoku'), { form: 'dragon', size: 50, reach: 380, travel: 12, body: '#ff9a3a', fin: B(11, 40, 8.8, 9) })],
+      swh: ['Flame Tiger Charge', 'A roaring tiger of flame lunges from his blade.', giant(c('rengoku'), { form: 'dragon', size: 50, reach: 380, travel: 12, fin: B(11, 40, 8.8, 9) })],
       dwh: ['Heart Ablaze', 'Steels himself: faster and harder-hitting for a long while, with a burst of flame to start.', buff(c('rengoku'), { label: 'SET YOUR HEART ABLAZE', speed: 1.12, dmg: 1.18, last: 480, blow: B(7, 80, 7.6, 7) })],
       awh: ['Blazing Wheel', 'Spins in midair as a wheel of flame.', barrage(c('rengoku'), { anim: 'spin', blades: true, len: 18, fin: B(8, 42, 7.4, 7.6) })],
       sfu: ['Blooming Flame Wave', 'A wave of fire rolls along the floor ahead.', groundWave(c('rengoku'), { w: 110, h: 110, speed: 10, fin: B(10, 80, 8.6, 8.6) })],
@@ -381,7 +381,7 @@ const KITS: Record<string, Kit> = {
       swl: ['Afterimage Dash', 'Leaves an afterimage in every frame of the dash.', rush(c('goku_ui'), { speed: 24, len: 10, multi: true, blow: B(6, 36, 4.8, 4) })],
       dwl: ['Silver Sweep', 'A sweep so smooth there is no windup.', melee(c('goku_ui'), { anim: 'sweep', x: 44, y: -12, w: 100, h: 30, blow: B(6, 78, 4.8, 3.2) })],
       awl: ['Silver Meteor', 'Drops out of the air, silver-white.', dive(c('goku_ui'), { vx: 4, vy: 17, land: B(6, 72, 5.4, 5) })],
-      nwh: ['Silver Dragon Rise', 'A dragon of silver ki bursts up under the target.', giant(c('goku_ui'), { form: 'dragon', path: 'rise', size: 50, travel: 12, body: '#e2e8f0', fin: B(11, 86, 9, 9) })],
+      nwh: ['Silver Dragon Rise', 'A dragon of silver ki bursts up under the target.', giant(c('goku_ui'), { form: 'dragon', path: 'rise', size: 50, travel: 12, fin: B(11, 86, 9, 9) })],
       swh: ['Mastered Afterimage Strike', 'Three strikes from three directions; each one looked like a dodge.', blink(c('goku_ui'), { n: 3, every: 5, range: 330, anim: 'punch', slash: false, fin: B(9, 42, 8, 8.2) })],
       dwh: ['Instinct Counter', 'Lets the blow come, and is not there when it arrives.', counter(c('goku_ui'), { window: [2, 22], teleport: true, blow: B(13, 70, 9, 9) })],
       awh: ['Silver Barrage', 'Fists thrown without a single wasted motion.', barrage(c('goku_ui'), { len: 20, fin: B(8, 42, 7.4, 7.6) })],
@@ -495,7 +495,7 @@ function transformation(id: string, stance: Stance, kit: Kit): MoveDef {
     vel: stance === 'side' ? [[12, 11, null], [22, 2, null]] : undefined,
     ability: 'awaken', stance, techniqueProfile: id, techniqueStyle: 'ki', variantOf: kit.form, chainLabel: LABEL.awaken, vfx: `awk:${id}`,
     onFrame: (f: any, fr: number, g: any) => {
-      if (fr === 1) { f.auraT = Math.max(f.auraT, 60); g.flashScreen('#000000', 0.2); sfx('confirm'); }
+      if (fr === 1) { f.auraT = Math.max(f.auraT, 60); g.flashScreen('#000000', 0.2); sfx('confirm'); if (f.grounded || stance === 'air') g.cinematic(f, kit.form.toUpperCase(), 52); }
       if (fr < 12 && fr % 2 === 0) { const a = Math.random() * 6.28; g.fx.add({ x: f.x + Math.cos(a) * 80, y: f.y - 44 + Math.sin(a) * 70, vx: -Math.cos(a) * 6, vy: -Math.sin(a) * 5, color: Math.random() < 0.5 ? th.c1 : th.c2, kind: 'glow', life: 14, size: 5 }); }
       if (fr === 12) {
         g.fx.text(f.x, f.y - 170, kit.form.toUpperCase(), '#ffffff', 26, 56);

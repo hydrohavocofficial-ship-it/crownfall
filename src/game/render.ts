@@ -1235,10 +1235,14 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
     ctx.globalCompositeOperation = 'lighter';
     const formCol = form ? hexA(form.aura, 1).replace(/,1\)$/, ',') : '';
     const col = devil ? 'rgba(220,20,50,' : god ? 'rgba(120,210,255,' : form ? formCol : techniqueActive ? 'rgba(255,255,255,' : 'rgba(180,110,255,';
+    // An awakened form already paints its own aura behind the body, so the
+    // generic backlight is kept to a soft tint; stacking three additive discs
+    // on a bright stage burns out to a white halo.
+    const bl = form ? 0.12 : 0.28;
     for (let i = 0; i < 3; i++) {
       const r = 48 + Math.sin(time * 0.3 + i * 2) * 7 + i * 8;
       const g = ctx.createRadialGradient(0, cy, 4, 0, cy, r);
-      g.addColorStop(0, col + '0.28)'); g.addColorStop(1, col + '0)');
+      g.addColorStop(0, col + bl + ')'); g.addColorStop(1, col + '0)');
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, cy, r, 0, Math.PI * 2); ctx.fill();
     }
     // rising energy wisps

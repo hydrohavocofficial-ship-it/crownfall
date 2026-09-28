@@ -729,7 +729,7 @@ function transformation(stance: Stance, name: string, desc: string, extra: Parti
     hits: [H(14, 20, 0, -40, 200, 150, 7, 70, 6.2, 5.4)],
     ...extra,
     onFrame: (f: any, fr: number, g: any) => {
-      if (fr === 1) { sfx('string'); g.fx.text(f.x, f.y - 120, 'fufufufu...', PINK_HI, 18, 26); }
+      if (fr === 1) { sfx('string'); g.fx.text(f.x, f.y - 120, 'fufufufu...', PINK_HI, 18, 26); g.cinematic(f, 'AWAKENING', 52); }
       if (fr === 14) {
         f.auraT = Math.max(f.auraT, 60);
         g.fx.text(f.x, f.y - 170, 'AWAKENING', '#ffffff', 30, 60);

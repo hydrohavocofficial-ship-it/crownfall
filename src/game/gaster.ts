@@ -764,6 +764,7 @@ function transformation(stance: Stance, name: string, desc: string, extra: Parti
       if (fr === 1) {
         spawn(g, f, 'soulGather', { x: f.x, y: f.y - 44, life: 26, dmg: 0 });
         sfx('soul'); g.flashScreen('#000000', 0.35);
+        g.cinematic(f, 'SEVEN SOULS', 52);
       }
       if (fr === 16) {
         f.auraT = Math.max(f.auraT, 60);

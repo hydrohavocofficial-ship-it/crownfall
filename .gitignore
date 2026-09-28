@@ -2,4 +2,3 @@
 dist
 .combat-regression-*
 scripts/.combat-regression-*
-.harness

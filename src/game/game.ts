@@ -92,7 +92,7 @@ export class Game {
   frame = 0; running = false; paused = false; raf = 0; last = 0; acc = 0;
   cam = { x: 0, y: -150, z: 0.8 }; shakeAmt = 0; flash = { c: '#fff', a: 0 };
   countdown = 170; timeLeft = 0; ended = false; endT = 0; timeScale = 1;
-  cin: { f: Fighter; name: string; t: number } | null = null;
+  cin: { f: Fighter; name: string; t: number; total?: number } | null = null;
   W = 800; H = 600; dpr = 1;
   bg: HTMLImageElement | null = null;
   ambient: { x: number; y: number; vx: number; vy: number; s: number; r: number }[] = [];
@@ -777,7 +777,7 @@ export class Game {
   cinematic(f: Fighter, name?: string, frames = 70) {
     sfx('ult');
     if (this.opts.preview) return;
-    this.cin = { f, name: name || 'ULTIMATE', t: frames };
+    this.cin = { f, name: name || 'ULTIMATE', t: frames, total: frames };
     this.flashScreen('#ffffff', 0.4);
   }
   spawnProj(s: ProjSpec) {
@@ -2189,7 +2189,7 @@ export class Game {
 
   drawCinematic(ctx: CanvasRenderingContext2D) {
     const c = this.cin!; const W = this.W, H = this.H;
-    const total = 70;                      // matches the default cinematic length
+    const total = c.total || 70;           // the length this cut-in was opened with
     const t = total - c.t;
     const inK = Math.min(1, t / 10), outK = Math.min(1, c.t / 10), k = inK * outK;
     const col = c.f.def.color;

@@ -1100,6 +1100,14 @@ mk({ id: 'denji', name: 'Denji', anime: 'Chainsaw Man', title: 'The Chainsaw Dev
 ];
 
 CHARACTERS.push(SUKUNA, SHADOW_DIO, GOKU_BLACK, GOKU_UI, GASTER, DOFLAMINGO);
+// The one word (or two) the HUD plate and the select grid print. First names
+// where fans use them, surnames where they do not, and a distinguishing word
+// wherever two fighters would otherwise share one.
+const SHORT: Record<string, string> = {
+  goku: 'Goku', rengoku: 'Rengoku', luffy: 'Luffy', zoro: 'Zoro', gojo: 'Gojo', deku: 'Deku', todoroki: 'Todoroki',
+  sukuna: 'Sukuna', shadowdio: 'DIO', gokublack: 'Goku Black', goku_ui: 'Goku UI', yuji: 'Yuji', killua: 'Killua',
+};
+for (const ch of CHARACTERS) if (SHORT[ch.id]) ch.short = SHORT[ch.id];
 // Every fighter's awakened kit is authored (see awakenKits.ts); the generated
 // template only survives as the scaffolding it replaces.
 installAwakenedKits(CHARACTERS);

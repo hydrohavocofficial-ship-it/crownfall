@@ -182,6 +182,19 @@ export function motifPath(ctx: CanvasRenderingContext2D, pts: [number, number][]
     stroke(ctx, a, hexA(th.c1, 0.9), w * 0.45);
     stroke(ctx, b, hexA(th.c2, 0.9), w * 0.35);
     stroke(ctx, pts, '#ffffff', w * 0.15);
+  } else if (m === 'wind' && w > 20) {
+    // Air pressure: a faint band with speed-lines streaming through it.
+    ctx.globalCompositeOperation = 'lighter';
+    stroke(ctx, pts, hexA(th.c1, 0.14), w * 1.1);
+    for (let k = 0; k < 6; k++) {
+      const off = (k / 5 - 0.5) * w * 0.8, lag = ((t * 0.9 + k * 13) % 30) / 30;
+      const shifted = pts.map(([x, y], i) => {
+        const [px, py] = pts[Math.max(0, i - 1)], [qx, qy] = pts[Math.min(pts.length - 1, i + 1)];
+        const dx = qx - px, dy = qy - py, L = Math.hypot(dx, dy) || 1;
+        return [x - dy / L * off, y + dx / L * off] as [number, number];
+      }).slice(Math.floor(lag * pts.length * 0.3));
+      if (shifted.length > 1) { stroke(ctx, shifted, hexA(th.c1, 0.35), 4); stroke(ctx, shifted, hexA('#ffffff', 0.8), 1.4); }
+    }
   } else if (SHARP.includes(m)) {
     ctx.globalCompositeOperation = 'lighter';
     stroke(ctx, pts, hexA(th.c1, 0.3), w * 1.4);
@@ -445,7 +458,23 @@ SIGS.awk_wave = {
     const th: Theme = p.data.th, m = th.motif;
     const a = clamp(Math.min(p.life / 6, (p.t + 1) / 3), 0, 1), w = p.w, h = p.h;
     ctx.save(); ctx.globalAlpha *= a;
-    if (m === 'ice' || m === 'titan' || m === 'stand') {
+    if (FIERY.includes(m) || m === 'blood') {
+      // A rolling wall of flame: tongues leaning with the direction of travel.
+      ctx.globalCompositeOperation = 'lighter';
+      for (let layer = 0; layer < 2; layer++) {
+        ctx.beginPath(); ctx.moveTo(p.x - w / 2, p.y);
+        const n = 8;
+        for (let i = 0; i <= n; i++) {
+          const u = i / n, x = p.x - w / 2 + u * w;
+          const hh = h * (0.45 + Math.sin(u * Math.PI) * 0.55) * (layer ? 0.7 : 1) * (0.85 + Math.sin(t * 0.5 + i * 1.9) * 0.15);
+          ctx.quadraticCurveTo(x - p.dir * 6, p.y - hh * 0.6, x + p.dir * hh * 0.18, p.y - hh);
+        }
+        ctx.lineTo(p.x + w / 2, p.y); ctx.closePath();
+        const g = ctx.createLinearGradient(0, p.y, 0, p.y - h);
+        g.addColorStop(0, hexA(layer ? th.c2 : th.c1, 0.85)); g.addColorStop(1, hexA(th.c1, 0));
+        ctx.fillStyle = g; ctx.fill();
+      }
+    } else if (m === 'ice' || m === 'titan' || m === 'stand') {
       for (let i = 0; i < 6; i++) {
         const u = i / 5, x = p.x - w / 2 + u * w, sh = h * (0.45 + Math.sin(u * Math.PI) * 0.55);
         ctx.beginPath(); ctx.moveTo(x - 8, p.y); ctx.lineTo(x + p.dir * 4, p.y - sh); ctx.lineTo(x + 8, p.y); ctx.closePath();
@@ -768,6 +797,19 @@ SIGS.awk_clone = {
   },
 };
 
+/** A grab's reach: a line (or a snapping hand of energy) shot out and reeled back. Visual only. */
+SIGS.awk_reach = {
+  init: (p) => { p.delay = MANUAL; },
+  update: (p) => { const o = p.owner; p.x = o.x + o.facing * 20; p.y = o.y - 50; },
+  draw: (p, ctx, t) => {
+    const d = p.data, th: Theme = d.th;
+    const k = p.t < 5 ? p.t / 5 : Math.max(0, 1 - (p.t - 5) / 7);
+    const ex = p.x + (d.tx - p.x) * k, ey = p.y + (d.ty - p.y) * k;
+    if (d.tether) motifPath(ctx, [[p.x, p.y], [(p.x + ex) / 2, (p.y + ey) / 2 + 6], [ex, ey]], 3, th, t);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, ex, ey, 16 + k * 10, th.c1, 0.7); ctx.restore();
+  },
+};
+
 /** Fists (or blades) blurring in front of a barrage. Visual only. */
 SIGS.awk_blur = {
   init: (p) => { p.delay = MANUAL; },
@@ -1004,7 +1046,7 @@ export function blink(c: KitCtx, o: { su?: number; n?: number; every?: number; r
   return {
     anim: o.anim ?? 'slash', startup: su, dur: su + n * every + 16, hits: [], grav: 0, invuln: [su, su + n * every],
     onFrame: (f: any, fr: number, g: any) => {
-      if (fr === su) f.blinkTarget = g.nearestEnemy(f, o.range ?? 300);
+      if (fr === su) f.blinkTarget = g.nearestEnemy(f, (o.range ?? 300) * 1.25);
       const T = f.blinkTarget;
       if (fr < su || fr >= su + n * every || (fr - su) % every !== 0) return;
       const i = (fr - su) / every;
@@ -1034,6 +1076,10 @@ export function grab(c: KitCtx, o: { su?: number; range?: number; n?: number; ev
       if (fr === su) {
         const T = g.nearestEnemy(f, o.range ?? 120);
         f.grabT = T && (T.x - f.x) * f.facing > -20 && T.invuln <= 0 ? T : null;
+        // The reach is always shown, so a whiff reads as a miss rather than a pause.
+        const reach = o.range ?? 120;
+        const tx = f.grabT ? f.grabT.x : f.x + f.facing * reach, ty = f.grabT ? f.grabT.y - 40 : f.y - 50;
+        spawn(g, f, 'awk_reach', { life: 12, data: { th: c.th, tx, ty, tether: o.tether } });
         if (f.grabT) { sfx('counter'); g.fx.text(f.x, f.y - 120, 'CAUGHT', c.th.c1, 18, 22); if (o.tether) g.fx.bolt(f.x + f.facing * 20, f.y - 50, f.grabT.x, f.grabT.y - 40, c.th.c1, 10, 2); }
       }
       const T = f.grabT;
