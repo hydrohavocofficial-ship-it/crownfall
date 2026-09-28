@@ -43,8 +43,11 @@ export function drawCostume(c: CanvasRenderingContext2D, id: string, look: Look,
       panel(c, [[x - 12, y + 1], [x - 8, y - 10], [x + 6, y - 8], [x + 12, y + 3], [7, hip], [-8, hip]], '#161e35', '#556780');
       line(c, [[x - 8, y - 8], [x + 4, y - 6], [x + 2, y + 6], [1, hip]], '#697b94', 1.1);
       for (let i = 0; i < 3; i++) disc(c, x + 4, y + 4 + i * 6, .9, '#d4dce9');
-      panel(c, [[hx - 12, hy - 5], [hx + 12, hy - 3], [hx + 11, hy + 3], [hx - 12, hy + 1]], '#080b16');
-      line(c, [[hx - 12, hy - 2], [hx - 22 - flow, hy + 2], [hx - 25, hy + 8]], '#344766', 3);
+      // The blindfold comes off when the Six Eyes open (awakened form sets mark 'none').
+      if (look.mark === 'blindfold') {
+        panel(c, [[hx - 12, hy - 5], [hx + 12, hy - 3], [hx + 11, hy + 3], [hx - 12, hy + 1]], '#080b16');
+        line(c, [[hx - 12, hy - 2], [hx - 22 - flow, hy + 2], [hx - 25, hy + 8]], '#344766', 3);
+      }
       if (empowered) { line(c, [[hx + 4, hy], [hx + 10, hy]], '#92edff', 2); disc(c, hx + 7, hy, 1.1, '#ffffff'); }
       break;
     }

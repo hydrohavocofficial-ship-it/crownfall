@@ -19,6 +19,7 @@ import './doflamingoArt';
 import './gasterArt';
 import { applyArtDirection } from './artDirection';
 import { installBossKit } from './bossKits';
+import { installAwakenedKits } from './awakenKits';
 
 export type CoreMoveKey =
   | 'nlight' | 'nlight2' | 'nlight3' | 'nlight_spec' | 'nlight_heavy'
@@ -403,12 +404,12 @@ mk({ id: 'rengoku', name: 'Kyojuro Rengoku', anime: 'Demon Slayer', title: 'The 
     nlight: mv('Flame Slash', 'slash', 24, 6, [H(6, 11, 50, -46, 86, 60, 8.5, 40, 3.8, 2.2, { fx: 'fire' })], { vfx: 'flameArc', chains: cN([6, 20]) }),
     nlight2: mv('Rising Inferno Arc', 'upslash', 24, 5, [H(5, 10, 52, -56, 88, 70, 9.5, 52, 4.4, 2.6, { fx: 'fire' })], { vfx: 'flameArc', chains: cN2([5, 20]) }),
     nlight3: mv('Flame Wheel', 'spin', 30, 6, MULTI(6, 18, 48, -44, 96, 78, 3.0, 9.5, 46, 6.2, 7.4, 'fire'), { turns: 2, vfx: 'flameTrail' }),
-    nlight_spec: mv('Unknowing Fire', 'thrust', 28, 5, [H(5, 15, 56, -44, 96, 62, 11.5, 32, 6.4, 7.4, { fx: 'fire' })], { vel: [[5, 20, 0]], invuln: [5, 12], vfx: 'flameTrail' }),
-    nlight_heavy: mv('Fifth Form: Flame Tiger', 'slam', 34, 7, [H(7, 16, 58, -34, 104, 88, 14, 58, 7.4, 8.8, { fx: 'fire' })], { vfx: 'flameTiger' }),
+    nlight_spec: mv('Flash Fire Stab', 'thrust', 28, 5, [H(5, 15, 56, -44, 96, 62, 11.5, 32, 6.4, 7.4, { fx: 'fire' })], { vel: [[5, 20, 0]], invuln: [5, 12], vfx: 'flameTrail' }),
+    nlight_heavy: mv('Blazing Upswing', 'slam', 34, 7, [H(7, 16, 58, -34, 104, 88, 14, 58, 7.4, 8.8, { fx: 'fire' })], { vfx: 'flameTiger' }),
     slight: mv('Blazing Thrust', 'thrust', 26, 6, [H(6, 11, 56, -42, 92, 36, 9, 26, 4.2, 2.5, { fx: 'fire' })], { vel: [[4, 8, null], [12, 2, null]], vfx: 'flameArc', chains: cS([6, 21]) }),
     slight2: mv('Cross Flame Cleave', 'slash', 26, 5, [H(5, 11, 60, -44, 96, 62, 10, 36, 5.2, 4.4, { fx: 'fire' })], { vel: [[4, 6, null]], vfx: 'flameArc', chains: cS2([5, 21]) }),
     slight_spec: mv('Flash Eruption', 'cast', 30, 5, [H(5, 15, 62, -44, 100, 70, 12, 36, 6.8, 7.8, { fx: 'fire' })], { vel: [[5, 21, -1]], vfx: 'flameTiger' }),
-    slight_heavy: mv('Blazing Universe', 'slam', 36, 7, [H(7, 17, 64, -38, 114, 88, 15, 44, 7.8, 9.2, { fx: 'fire' })], { vfx: 'flameTiger' }),
+    slight_heavy: mv('Heavenly Flame Cleave', 'slam', 36, 7, [H(7, 17, 64, -38, 114, 88, 15, 44, 7.8, 9.2, { fx: 'fire' })], { vfx: 'flameTiger' }),
     dlight: mv('Flame Sweep', 'lowslash', 26, 5, [H(5, 11, 48, -14, 92, 30, 8.5, 70, 4.4, 1.9, { fx: 'fire' })], { vel: [[4, 7, null], [14, 2, null]], vfx: 'flameArc', chains: cD([5, 21]) }),
     dlight2: mv('Rising Crescent', 'upslash', 25, 4, [H(4, 10, 32, -62, 76, 86, 10, 84, 6.0, 5.2, { fx: 'fire' })], { vel: [[4, 2, -11]], vfx: 'flameArc' }),
     dlight_spec: mv('Ground Flame Wave', 'slam', 30, 5, [H(5, 15, 52, -20, 124, 62, 11.5, 64, 6.8, 7.4, { fx: 'fire' })], { vfx: 'flameTiger' }),
@@ -517,7 +518,7 @@ mk({ id: 'asta', name: 'Asta', anime: 'Black Clover', title: 'Anti-Magic Knight'
   ai: { horizSpec: 'nspec', counterSpec: 'dspec', ultRange: 340 } }),
 
 // ---------------- GOKU : ki fundamentals, strong aerials ----------------
-mk({ id: 'goku', name: 'Son Goku', anime: 'Dragon Ball', title: 'Saiyan Raised on Earth', tier: 'S', color: '#ff8a1a', uiForm: true,
+mk({ id: 'goku', name: 'Son Goku', anime: 'Dragon Ball', title: 'Saiyan Raised on Earth', tier: 'S', color: '#ff8a1a',
   desc: 'Textbook martial artist. Crisp, evenly-spaced strikes that flow into ki bursts, with the best air-to-air game around. His Awakening is Ultra Instinct: the transformation repaints him in silver and turns the whole frame silver with him, and his awakened special is the Spirit Bomb at half its old weight.',
   stats: ST(7.0, 6.9, 13.9, 0.99, 0.98, 0.59), bars: BR(4, 4, 4, 4),
   look: { skin: '#f6cfa8', hair: '#16130f', hairStyle: 'spikeLong', top: '#ff7a14', top2: '#1a5ed8', sleeve: '#ff7a14', fore: '#f6cfa8', pants: '#ff7a14', boots: '#1a5ed8', eye: '#1a90ff', weapon: 'claws', energy: '#ffd24a', energy2: '#8fe3ff' },
@@ -558,7 +559,7 @@ mk({ id: 'goku', name: 'Son Goku', anime: 'Dragon Ball', title: 'Saiyan Raised o
     sair2: mv('Ki Blast Fist', 'punch', 22, 4, [H(4, 11, 48, -42, 68, 48, 8.5, 34, 5.0, 4.2, { fx: 'fire' })], { land: true, trail: 'hand', vfx: 'kiFlare' }),
     sair_spec: mv('Air Dragon Thrust', 'thrust', 26, 5, [H(5, 14, 52, -40, 86, 58, 11, 38, 6.4, 7.0, { fx: 'fire' })], { vel: [[5, 15, -1]], vfx: 'dragonFist' }),
     dair: mv('Meteor Dropkick', 'dkick', 25, 5, [H(5, 14, 8, -6, 46, 44, 9, -56, 3.7, 2.1, { fx: 'fire' })], { land: true, trail: 'foot', vfx: 'kiCharge' }),
-    nsig: mv('Dragon Fist', 'uppercut', 42, 12, [H(12, 19, 20, -62, 70, 98, 15.5, 86, 6.8, 8.8, { fx: 'fire' })], { vfx: 'dragonFist' }),
+    nsig: mv('Rising Dragon Uppercut', 'uppercut', 42, 12, [H(12, 19, 20, -62, 70, 98, 15.5, 86, 6.8, 8.8, { fx: 'fire' })], { vfx: 'dragonFist' }),
     ssig: mv('Dragon Rush', 'thrust', 44, 13, [H(13, 19, 50, -44, 84, 58, 16.5, 38, 7.2, 9.4, { fx: 'fire' })], { vel: [[11, 8, null], [21, 1, null]], vfx: 'dragonFist' }),
     dsig: mv('Power Slam', 'spin', 48, 14, MULTI(14, 26, 44, -30, 150, 78, 3.0, 9.5, 64, 7.2, 9.0, 'fire'), { turns: 3, vfx: 'kiFlare' }),
     rec: mv('Ki Ascent', 'rise', 36, 6, MULTI(6, 21, 10, -50, 80, 94, 3.0, 8, 82, 5.8, 7.6, 'fire', 5), { turns: 2, grav: 0.4, vel: [[6, 2, -14.4]], vfx: 'kiCharge' }),
@@ -600,7 +601,7 @@ mk({ id: 'ichigo', name: 'Ichigo Kurosaki', anime: 'Bleach', title: 'Substitute 
     sair_spec: mv('Air Flashstep', 'thrust', 26, 4, [H(4, 14, 54, -40, 92, 62, 11, 38, 6.6, 7.2, { fx: 'dark' })], { vel: [[4, 16, 0]], vfx: 'reiatsu' }),
     dair: mv('Dark Dive Cleave', 'dive', 28, 6, [H(6, 16, 34, -10, 70, 56, 9.5, -50, 3.8, 2.2, { fx: 'dark' })], { land: true, vel: [[6, 4, 10]], vfx: 'getsuga' }),
     nsig: mv('Getsuga Skyward', 'upslash', 44, 13, [H(13, 21, 28, -72, 100, 126, 16, 86, 7.2, 9.4, { fx: 'dark' })], { vfx: 'getsuga' }),
-    ssig: mv('Black Flash', 'thrust', 42, 11, [H(11, 21, 54, -42, 110, 56, 15, 40, 7.4, 9.8, { fx: 'dark' })], { vfx: 'getsuga' }),
+    ssig: mv('Getsuga Blade Rush', 'thrust', 42, 11, [H(11, 21, 54, -42, 110, 56, 15, 40, 7.4, 9.8, { fx: 'dark' })], { vfx: 'getsuga' }),
     dsig: mv('Tensa Counterblade', 'counter', 46, 14, [H(14, 22, 0, -42, 186, 96, 15, 64, 7.0, 9.0, { fx: 'dark' })], { invuln: [8, 24], vfx: 'reiatsu' }),
     rec: mv('Bankai Rising Leap', 'flip', 36, 6, MULTI(6, 21, 10, -50, 82, 96, 3.0, 8, 82, 5.6, 7.4, 'dark', 4), { turns: 3, grav: 0.4, vel: [[6, 2, -14.4]], vfx: 'reiatsu' }),
     gp: mv('Guillotine Drop', 'dive', 38, 7, [H(7, 30, 24, -16, 72, 58, 11.5, -52, 5.2, 7.4, { fx: 'dark' })], { land: true, vel: [[7, 3, 19]], vfx: 'getsuga' }),
@@ -640,7 +641,7 @@ mk({ id: 'naruto', name: 'Naruto Uzumaki', anime: 'Naruto', title: 'The Seventh 
     sair_spec: mv('Air Rasenshuriken', 'cast', 26, 5, [H(5, 14, 52, -40, 88, 60, 11, 38, 6.4, 7.0, { fx: 'elec' })], { vel: [[5, 12, 0]], vfx: 'shuriken' }),
     dair: mv('Spiral Clone Stomp', 'dkick', 25, 5, [H(5, 14, 8, -6, 46, 44, 9, -56, 3.6, 2.1, { fx: 'blunt' })], { land: true, trail: 'foot', vfx: 'cloneEcho' }),
     nsig: mv('Giant Rasengan', 'cast', 42, 12, [H(12, 19, 40, -50, 92, 86, 15.5, 60, 6.8, 8.8, { fx: 'elec' })], { vfx: 'rasengan' }),
-    ssig: mv('Rasengan Rush', 'thrust', 44, 12, [H(12, 20, 54, -44, 98, 66, 16.5, 38, 7.2, 9.4, { fx: 'elec' })], { vel: [[12, 14, null], [22, 2, null]], vfx: 'rasengan' }),
+    ssig: mv('Rasengan Charge', 'thrust', 44, 12, [H(12, 20, 54, -44, 98, 66, 16.5, 38, 7.2, 9.4, { fx: 'elec' })], { vel: [[12, 14, null], [22, 2, null]], vfx: 'rasengan' }),
     dsig: mv('Clone Trampoline', 'counter', 46, 13, [H(13, 22, 0, -42, 172, 84, 14.5, 64, 7.0, 8.8, { fx: 'blunt' })], { invuln: [6, 22], vfx: 'cloneEcho' }),
     rec: mv('Clone Boost Leap', 'rise', 36, 5, MULTI(5, 20, 10, -50, 80, 96, 3.0, 8, 82, 5.8, 7.6, 'elec', 5), { turns: 1, grav: 0.4, vel: [[5, 2, -15]], vfx: 'cloneEcho' }),
     gp: mv('Rasengan Slam', 'slam', 40, 7, [H(7, 30, 34, -10, 70, 60, 11.5, -52, 5.6, 7.8, { fx: 'elec' })], { land: true, vel: [[7, 0, 18]], vfx: 'rasengan' }),
@@ -660,7 +661,7 @@ mk({ id: 'tanjiro', name: 'Tanjiro Kamado', anime: 'Demon Slayer', title: 'Water
   stats: ST(6.9, 6.4, 13.6, 0.98, 0.95, 0.61), bars: BR(4, 4, 4, 4),
   look: { skin: '#f3d3b4', hair: '#4a1f18', hair2: '#8a2f1e', hairStyle: 'messy', top: '#1d2228', top2: '#2e6f4f', sleeve: '#1d2228', fore: '#f3d3b4', pants: '#26303a', boots: '#efe6d2', cape: '#2a6f52', cape2: '#49b6e8', capeLen: 36, eye: '#b8434f', weapon: 'katana', energy: '#49b6e8', energy2: '#c9f0ff', mark: 'scar' },
   moves: {
-    nlight: mv('Water Surface Slash', 'slash', 20, 4, [H(4, 9, 46, -46, 76, 54, 7, 38, 3.6, 2.1, { fx: 'slash' })], { vfx: 'waterArc', chains: cN([4, 17]) }),
+    nlight: mv('First Form: Flowing Cut', 'slash', 20, 4, [H(4, 9, 46, -46, 76, 54, 7, 38, 3.6, 2.1, { fx: 'slash' })], { vfx: 'waterArc', chains: cN([4, 17]) }),
     nlight2: mv('Water Wheel', 'spin', 21, 3, [H(3, 9, 44, -44, 82, 66, 8, 44, 4.2, 2.5, { fx: 'slash' })], { turns: 1, vfx: 'waterRipple', chains: cN2([3, 17]) }),
     nlight3: mv('Whirlpool Finish', 'spin', 28, 4, MULTI(4, 18, 44, -42, 92, 78, 2.6, 9, 48, 6.2, 7.2, 'slash'), { turns: 3, vfx: 'waterRipple' }),
     nlight_spec: mv('Flowing Dance', 'thrust', 26, 4, [H(4, 14, 52, -43, 88, 58, 10, 32, 6.2, 7.0, { fx: 'slash' })], { vel: [[4, 16, 0]], vfx: 'waterArc' }),
@@ -679,8 +680,8 @@ mk({ id: 'tanjiro', name: 'Tanjiro Kamado', anime: 'Demon Slayer', title: 'Water
     sair2: mv('Ripple Cleave', 'backslash', 22, 4, [H(4, 11, 52, -42, 86, 58, 9, 36, 5.0, 4.4, { fx: 'slash' })], { land: true, vfx: 'waterArc' }),
     sair_spec: mv('Air Waterfall', 'thrust', 26, 5, [H(5, 14, 54, -40, 88, 62, 11, 38, 6.6, 7.2, { fx: 'slash' })], { vel: [[5, 14, 0]], vfx: 'waterRipple' }),
     dair: mv('Plunging Tide', 'dive', 28, 6, [H(6, 16, 30, -10, 66, 54, 9, -52, 3.8, 2.2, { fx: 'slash' })], { land: true, vel: [[6, 4, 10]], vfx: 'waterRipple' }),
-    nsig: mv('Eleventh Form: Dead Calm', 'upslash', 44, 13, [H(13, 20, 26, -72, 94, 122, 15.5, 86, 7.0, 9.2, { fx: 'slash' })], { vfx: 'waterArc' }),
-    ssig: mv('Tenth Form: Dragon', 'slash', 46, 13, MULTI(13, 26, 56, -44, 110, 84, 2.8, 10, 38, 7.2, 9.2, 'slash', 3), { vel: [[11, 7, null], [27, 1, null]], vfx: 'waterRipple' }),
+    nsig: mv('Second Form: Water Wheel', 'upslash', 44, 13, [H(13, 20, 26, -72, 94, 122, 15.5, 86, 7.0, 9.2, { fx: 'slash' })], { vfx: 'waterArc' }),
+    ssig: mv('Sixth Form: Whirlpool', 'slash', 46, 13, MULTI(13, 26, 56, -44, 110, 84, 2.8, 10, 38, 7.2, 9.2, 'slash', 3), { vel: [[11, 7, null], [27, 1, null]], vfx: 'waterRipple' }),
     dsig: mv('Water Quake', 'slam', 48, 15, [H(15, 22, 48, -20, 168, 66, 15.5, 64, 7.0, 9.0, { fx: 'slash' })], { vfx: 'waterRipple' }),
     rec: mv('Rising Torrent', 'rise', 36, 6, MULTI(6, 21, 10, -52, 80, 94, 3.0, 8, 82, 5.7, 7.5, 'slash', 5), { turns: 2, grav: 0.4, vel: [[6, 2, -14.2]], vfx: 'waterArc' }),
     gp: mv('Crashing Wave', 'slam', 40, 8, [H(8, 34, 24, -22, 88, 64, 12, -60, 5.6, 7.6, { fx: 'slash' })], { land: true, vel: [[8, 0, 18]], vfx: 'waterRipple' }),
@@ -741,9 +742,9 @@ mk({ id: 'luffy', name: 'Monkey D. Luffy', anime: 'One Piece', title: 'Future Pi
   stats: ST(6.8, 6.3, 13.9, 1.02, 0.94, 0.6), bars: BR(5, 3, 5, 3),
   look: { skin: '#f2c79f', hair: '#1a1410', hairStyle: 'messy', top: '#d8423a', top2: '#f2dfa8', sleeve: '#f2c79f', fore: '#f2c79f', pants: '#2e5fa8', boots: '#3a2a1a', eye: '#3a2a20', weapon: 'claws', energy: '#ff6a4a', energy2: '#ffd2a8', mark: 'hat' },
   moves: {
-    nlight: mv('Gum-Gum Pistol', 'punch', 22, 6, [H(6, 12, 76, -47, 128, 30, 7, 38, 3.4, 2.1, { fx: 'blunt' })], { trail: 'hand', vfx: 'rubberStretch', chains: cN([6, 20]) }),
+    nlight: mv('Rubber Jab', 'punch', 22, 6, [H(6, 12, 76, -47, 128, 30, 7, 38, 3.4, 2.1, { fx: 'blunt' })], { trail: 'hand', vfx: 'rubberStretch', chains: cN([6, 20]) }),
     nlight2: mv('Gum-Gum Whip', 'kick', 23, 5, [H(5, 12, 84, -44, 140, 34, 8, 44, 4.0, 2.5, { fx: 'blunt' })], { trail: 'foot', vfx: 'rubberStretch', chains: cN2([5, 20]) }),
-    nlight3: mv('Gum-Gum Gatling', 'punch', 32, 5, MULTI(5, 24, 74, -44, 124, 54, 2.2, 9, 44, 6.2, 7.2, 'blunt', 3), { trail: 'hand', vfx: 'gatling' }),
+    nlight3: mv('Gum-Gum Spinning Lash', 'punch', 32, 5, MULTI(5, 24, 74, -44, 124, 54, 2.2, 9, 44, 6.2, 7.2, 'blunt', 3), { trail: 'hand', vfx: 'gatling' }),
     nlight_spec: mv('Gum-Gum Bazooka', 'thrust', 30, 7, [H(7, 16, 88, -44, 140, 62, 11.5, 32, 6.6, 7.4, { fx: 'blunt' })], { trail: 'hand', vfx: 'rubberStretch' }),
     nlight_heavy: mv('Gum-Gum Rocket Upper', 'uppercut', 34, 7, [H(7, 16, 34, -70, 80, 104, 13, 86, 7.4, 8.6, { fx: 'blunt' })], { vel: [[7, 2, -12]], vfx: 'rubberStretch' }),
     slight: mv('Gum-Gum Stretch Jab', 'thrust', 26, 6, [H(6, 13, 92, -43, 150, 34, 8, 26, 4.2, 2.5, { fx: 'blunt' })], { trail: 'hand', vfx: 'rubberStretch', chains: cS([6, 22]) }),
@@ -760,7 +761,7 @@ mk({ id: 'luffy', name: 'Monkey D. Luffy', anime: 'One Piece', title: 'Future Pi
     sair2: mv('Gum-Gum Hammer', 'slam', 25, 5, [H(5, 13, 74, -42, 122, 58, 9.5, 36, 5.0, 4.4, { fx: 'blunt' })], { land: true, vfx: 'rubberStretch' }),
     sair_spec: mv('Air Gum-Gum Rifle', 'thrust', 28, 6, [H(6, 16, 96, -40, 152, 56, 11, 38, 6.6, 7.2, { fx: 'blunt' })], { vfx: 'gatling' }),
     dair: mv('Gum-Gum Stomp', 'dkick', 28, 6, [H(6, 16, 10, -6, 56, 50, 9.5, -56, 3.8, 2.2, { fx: 'blunt' })], { land: true, trail: 'foot', vfx: 'rubberStretch' }),
-    nsig: mv('Gum-Gum Elephant Gun', 'uppercut', 46, 14, [H(14, 22, 34, -66, 116, 116, 17, 84, 7.4, 9.4, { fx: 'blunt' })], { vfx: 'rubberStretch' }),
+    nsig: mv('Gum-Gum Hammer Upper', 'uppercut', 46, 14, [H(14, 22, 34, -66, 116, 116, 17, 84, 7.4, 9.4, { fx: 'blunt' })], { vfx: 'rubberStretch' }),
     ssig: mv('Gum-Gum Red Hawk', 'thrust', 46, 13, [H(13, 22, 96, -44, 164, 62, 17.5, 38, 7.4, 9.6, { fx: 'fire' })], { vfx: 'redHawk' }),
     dsig: mv('Gum-Gum Grizzly Magnum', 'slam', 50, 16, [H(16, 24, 62, -22, 196, 74, 17, 62, 7.2, 9.2, { fx: 'blunt' })], { vfx: 'gatling' }),
     rec: mv('Gum-Gum Rocket', 'rise', 36, 6, MULTI(6, 21, 12, -52, 86, 98, 3.0, 8, 82, 5.8, 7.6, 'blunt', 5), { turns: 1, grav: 0.4, vel: [[6, 3, -15]], vfx: 'rubberStretch' }),
@@ -781,7 +782,7 @@ mk({ id: 'zoro', name: 'Roronoa Zoro', anime: 'One Piece', title: 'Three-Sword S
   stats: ST(6.3, 6.0, 13.2, 1.1, 1.0, 0.62), bars: BR(5, 2, 5, 4),
   look: { skin: '#eccfa8', hair: '#4caf6a', hairStyle: 'spikeShort', top: '#1f2a24', top2: '#2fa36a', sleeve: '#f0f0f0', fore: '#eccfa8', pants: '#1c2320', boots: '#2a2018', cape: '#2b6b4a', capeLen: 32, eye: '#2b2b2b', weapon: 'triple', energy: '#8dffbe', energy2: '#e6fff0', mark: 'bandana' },
   moves: {
-    nlight: mv('Oni Giri', 'slash', 25, 6, [H(6, 12, 52, -46, 92, 68, 9, 40, 3.9, 2.3, { fx: 'slash' })], { vfx: 'triCut', chains: cN([6, 21]) }),
+    nlight: mv('Santoryu Slash', 'slash', 25, 6, [H(6, 12, 52, -46, 92, 68, 9, 40, 3.9, 2.3, { fx: 'slash' })], { vfx: 'triCut', chains: cN([6, 21]) }),
     nlight2: mv('Tora Gari', 'backslash', 25, 5, [H(5, 11, 56, -44, 96, 70, 10, 46, 4.4, 2.7, { fx: 'slash' })], { vfx: 'triCut', chains: cN2([5, 21]) }),
     nlight3: mv('Three-Sword Flurry', 'spin', 32, 6, MULTI(6, 20, 52, -44, 104, 82, 3.0, 10, 46, 6.4, 7.4, 'slash'), { turns: 3, vfx: 'windCross' }),
     nlight_spec: mv('Flying Slash', 'thrust', 30, 6, [H(6, 16, 60, -44, 104, 62, 12, 32, 6.6, 7.4, { fx: 'slash' })], { vfx: 'windCross',
@@ -803,7 +804,7 @@ mk({ id: 'zoro', name: 'Roronoa Zoro', anime: 'One Piece', title: 'Three-Sword S
     dair: mv('Plunging Tiger', 'dive', 30, 7, [H(7, 18, 34, -10, 76, 58, 10, -50, 4.0, 2.3, { fx: 'slash' })], { land: true, vel: [[7, 4, 11]], vfx: 'triCut' }),
     nsig: mv('Dragon Twister', 'rise', 48, 15, MULTI(15, 30, 12, -60, 104, 118, 3.2, 10.5, 84, 7.2, 9.2, 'slash'), { turns: 3, vel: [[15, 1, -9]], vfx: 'windCross' }),
     ssig: mv('Rashomon', 'slash', 50, 15, [H(15, 22, 70, -44, 142, 96, 18, 38, 7.4, 9.8, { fx: 'slash' })], { vel: [[13, 6, null], [23, 1, null]], vfx: 'windCross' }),
-    dsig: mv('Purgatory Onigiri', 'slam', 52, 16, [H(16, 24, 56, -22, 190, 74, 17.5, 62, 7.2, 9.4, { fx: 'slash' })], { vfx: 'triCut' }),
+    dsig: mv('Rengoku Onigiri', 'slam', 52, 16, [H(16, 24, 56, -22, 190, 74, 17.5, 62, 7.2, 9.4, { fx: 'slash' })], { vfx: 'triCut' }),
     rec: mv('Rising Dragon Twister', 'rise', 38, 6, MULTI(6, 21, 12, -52, 88, 98, 3.0, 8, 82, 5.8, 7.6, 'slash', 5), { turns: 2, grav: 0.44, vel: [[6, 2, -14]], vfx: 'windCross' }),
     gp: mv('Great Dragon Shock', 'slam', 42, 8, [H(8, 34, 26, -22, 98, 66, 13.5, -60, 5.8, 8.0, { fx: 'slash' })], { land: true, vel: [[8, 0, 19]], vfx: 'triCut' }),
     nspec: mv('Flying Slash: Cross Cutter', 'cast', 42, 12, [], { cd: 168, grav: 0.35, vfx: 'windCross', desc: 'Launches a huge crossing pair of compressed air blades.',
@@ -842,7 +843,7 @@ mk({ id: 'saitama', name: 'Saitama', anime: 'One-Punch Man', title: 'The Caped B
     sair_spec: mv('Air Burst Lunge', 'thrust', 30, 7, [H(7, 17, 58, -40, 104, 62, 14, 38, 7.0, 7.6, { fx: 'blunt' })], { vel: [[7, 16, 0]], vfx: 'airPressure' }),
     dair: mv('Meteor Stomp', 'dkick', 30, 7, [H(7, 18, 10, -6, 54, 50, 13, -56, 4.2, 2.8, { fx: 'blunt' })], { land: true, trail: 'foot', vfx: 'airPressure' }),
     nsig: mv('Serious Uppercut', 'uppercut', 50, 16, [H(16, 24, 26, -66, 96, 116, 21, 86, 8.0, 9.8, { fx: 'blunt' })], { vfx: 'seriousWind' }),
-    ssig: mv('Serious Punch', 'thrust', 52, 17, [H(17, 26, 62, -44, 128, 70, 23, 38, 8.4, 10, { fx: 'blunt' })], { vfx: 'seriousWind' }),
+    ssig: mv('Killer Move: Normal Punch', 'thrust', 52, 17, [H(17, 26, 62, -44, 128, 70, 23, 38, 8.4, 10, { fx: 'blunt' })], { vfx: 'seriousWind' }),
     dsig: mv('Ground Shatter', 'slam', 54, 18, [H(18, 26, 52, -22, 210, 76, 21, 62, 8.0, 9.8, { fx: 'blunt' })], { vfx: 'hardenCrack' }),
     rec: mv('Hero Jump', 'rise', 36, 6, MULTI(6, 21, 12, -52, 84, 96, 3.6, 10, 82, 6.0, 7.8, 'blunt', 5), { turns: 1, grav: 0.42, vel: [[6, 2, -15.5]], vfx: 'airPressure' }),
     gp: mv('Crater Drop', 'dkick', 42, 8, [H(8, 34, 26, -14, 92, 64, 15, -60, 6.0, 8.2, { fx: 'blunt' })], { land: true, vel: [[8, 0, 20]], vfx: 'hardenCrack' }),
@@ -904,13 +905,13 @@ mk({ id: 'yuji', name: 'Yuji Itadori', anime: 'Jujutsu Kaisen', title: "Sukuna's
   look: { skin: '#f3d6bd', hair: '#ff8fae', hairStyle: 'spikeShort', top: '#1b1f28', top2: '#ff5f8a', sleeve: '#1b1f28', fore: '#f3d6bd', pants: '#232833', boots: '#15181f', eye: '#c9563f', weapon: 'claws', energy: '#ff5f8a', energy2: '#ffd0dd' },
   moves: {
     nlight: mv('Straight Jab', 'punch', 17, 3, [H(3, 7, 34, -48, 52, 32, 6, 38, 3.2, 2.0, { fx: 'blunt' })], { trail: 'hand', vfx: 'cursedFist', chains: cN([3, 15]) }),
-    nlight2: mv('Divergent Fist', 'punch', 20, 3, [H(3, 6, 38, -46, 56, 36, 5, 40, 3.0, 1.8, { fx: 'blunt' }), H(9, 12, 40, -46, 60, 40, 6, 46, 4.2, 3.0, { fx: 'dark', g: 1 })], { trail: 'hand', vfx: 'cursedFist', chains: cN2([3, 18]) }),
+    nlight2: mv('Cursed Straight', 'punch', 20, 3, [H(3, 6, 38, -46, 56, 36, 5, 40, 3.0, 1.8, { fx: 'blunt' }), H(9, 12, 40, -46, 60, 40, 6, 46, 4.2, 3.0, { fx: 'dark', g: 1 })], { trail: 'hand', vfx: 'cursedFist', chains: cN2([3, 18]) }),
     nlight3: mv('Cursed Combo', 'uppercut', 26, 4, [H(4, 9, 36, -58, 62, 76, 8, 80, 5.4, 5.2, { fx: 'blunt' }), H(13, 17, 38, -58, 66, 80, 6, 86, 6.0, 6.6, { fx: 'dark', g: 1 })], { vfx: 'cursedFist' }),
-    nlight_spec: mv('Black Flash', 'punch', 28, 5, [H(5, 12, 44, -44, 72, 54, 15, 34, 7.0, 8.0, { fx: 'dark' })], { vel: [[5, 14, 0]], trail: 'hand', vfx: 'blackFlash' }),
+    nlight_spec: mv('Cursed Palm Burst', 'punch', 28, 5, [H(5, 12, 44, -44, 72, 54, 15, 34, 7.0, 8.0, { fx: 'dark' })], { vel: [[5, 14, 0]], trail: 'hand', vfx: 'blackFlash' }),
     nlight_heavy: mv('Rising Divergent', 'uppercut', 30, 5, [H(5, 13, 26, -68, 70, 94, 11, 88, 6.8, 8.0, { fx: 'blunt' }), H(17, 20, 26, -60, 72, 86, 5, 86, 4.0, 4.0, { fx: 'dark', g: 1 })], { vel: [[5, 2, -12]], vfx: 'cursedFist' }),
     slight: mv('Rush Step', 'thrust', 21, 4, [H(4, 8, 44, -44, 66, 38, 7, 28, 4.0, 2.4, { fx: 'blunt' })], { vel: [[3, 12, null], [10, 2, null]], vfx: 'cursedFist', chains: cS([4, 17]) }),
     slight2: mv('Elbow Crush', 'punch', 21, 3, [H(3, 8, 46, -44, 68, 46, 8, 34, 5.0, 4.0, { fx: 'blunt' })], { trail: 'hand', vfx: 'cursedFist', chains: cS2([3, 17]) }),
-    slight_spec: mv('Manji Kick', 'kick', 28, 4, [H(4, 14, 48, -50, 78, 82, 11.5, 76, 6.4, 7.0, { fx: 'blunt' })], { vel: [[4, 15, -7]], trail: 'foot', vfx: 'cursedFist' }),
+    slight_spec: mv('Cursed Front Kick', 'kick', 28, 4, [H(4, 14, 48, -50, 78, 82, 11.5, 76, 6.4, 7.0, { fx: 'blunt' })], { vel: [[4, 15, -7]], trail: 'foot', vfx: 'cursedFist' }),
     slight_heavy: mv('Cursed Smash', 'slam', 32, 6, [H(6, 14, 56, -40, 100, 78, 14, 42, 7.6, 9.0, { fx: 'dark' })], { vfx: 'blackFlash' }),
     dlight: mv('Low Sweep', 'sweep', 21, 4, [H(4, 9, 38, -10, 62, 28, 7, 72, 4.0, 1.9, { fx: 'blunt' })], { trail: 'foot', vfx: 'cursedFist', chains: cD([4, 17]) }),
     dlight2: mv('Rising Knee', 'uppercut', 22, 4, [H(4, 10, 26, -58, 60, 78, 9, 86, 5.8, 4.8, { fx: 'blunt' })], { vel: [[4, 1, -10]], vfx: 'cursedFist' }),
@@ -926,7 +927,7 @@ mk({ id: 'yuji', name: 'Yuji Itadori', anime: 'Jujutsu Kaisen', title: "Sukuna's
     ssig: mv('Divergent Charge', 'thrust', 46, 13, [H(13, 20, 54, -44, 100, 60, 14, 38, 6.8, 9.0, { fx: 'blunt' }), H(26, 30, 56, -44, 104, 64, 7, 42, 5.0, 6.0, { fx: 'dark', g: 1 })], { vel: [[11, 9, null], [22, 1, null]], vfx: 'blackFlash' }),
     dsig: mv('Cursed Quake', 'slam', 48, 15, [H(15, 22, 48, -20, 168, 66, 16, 64, 7.2, 9.0, { fx: 'dark' })], { vfx: 'blackFlash' }),
     rec: mv('Cursed Ascent', 'rise', 36, 5, MULTI(5, 20, 10, -52, 80, 94, 3.0, 8, 82, 5.8, 7.6, 'blunt', 5), { turns: 2, grav: 0.4, vel: [[5, 2, -14.6]], vfx: 'cursedFist' }),
-    gp: mv('Slaughter Demon', 'dkick', 40, 7, [H(7, 32, 30, -12, 70, 58, 12, -54, 5.6, 7.8, { fx: 'dark' })], { land: true, vel: [[7, 0, 19]], vfx: 'blackFlash' }),
+    gp: mv('Cursed Drop', 'dkick', 40, 7, [H(7, 32, 30, -12, 70, 58, 12, -54, 5.6, 7.8, { fx: 'dark' })], { land: true, vel: [[7, 0, 19]], vfx: 'blackFlash' }),
     nspec: mv('Black Flash', 'punch', 34, 8, [H(8, 16, 46, -44, 84, 62, 17, 34, 7.2, 8.4, { fx: 'dark' })],
       { cd: 155, grav: 0.2, vel: [[0, 0, 0], [8, 21, 0], [17, 2, null]], trail: 'hand', vfx: 'blackFlash', desc: 'Warps cursed energy at the instant of impact — a distortion-cracking blow.' }),
     sspec: mv('Manji Kick', 'kick', 32, 6, [H(6, 16, 50, -50, 84, 88, 12.5, 76, 6.6, 7.4, { fx: 'blunt' })],
@@ -966,7 +967,7 @@ mk({ id: 'deku', name: 'Izuku Midoriya', anime: 'My Hero Academia', title: 'One 
     ssig: mv('Texas Charge', 'thrust', 44, 12, [H(12, 20, 70, -44, 132, 62, 16.5, 36, 7.2, 9.4, { fx: 'elec' })], { vfx: 'airForce' }),
     dsig: mv('Missouri Quake', 'slam', 48, 15, [H(15, 22, 48, -20, 164, 66, 15.5, 64, 7.0, 9.0, { fx: 'elec' })], { vfx: 'smashShock' }),
     rec: mv('Full Cowl Ascent', 'rise', 34, 5, MULTI(5, 20, 10, -52, 78, 94, 2.9, 8, 82, 5.7, 7.4, 'elec', 5), { turns: 2, grav: 0.38, vel: [[5, 2, -15.4]], vfx: 'cowlSpark' }),
-    gp: mv('Manchester Smash', 'dkick', 38, 7, [H(7, 30, 28, -12, 68, 58, 11.5, -56, 5.4, 7.6, { fx: 'elec' })], { land: true, vel: [[7, 0, 19]], vfx: 'smashShock' }),
+    gp: mv('Falling Axe Kick', 'dkick', 38, 7, [H(7, 30, 28, -12, 68, 58, 11.5, -56, 5.4, 7.6, { fx: 'elec' })], { land: true, vel: [[7, 0, 19]], vfx: 'smashShock' }),
     nspec: mv('Delaware Smash: Air Force', 'cast', 38, 10, [], { cd: 162, grav: 0.35, vfx: 'airForce', desc: 'Flicks a finger and fires a compressed bullet of wind pressure.',
       onFrame: (f: any, fr: number, g: any) => { if (fr === 10) { g.spawnProj({ owner: f, type: 'fireball', style: 'wind', col: '#d8ffe6', col2: '#8dffb0', x: f.x + f.facing * 46, y: f.y - 46, vx: f.facing * 17, vy: 0, w: 66, h: 70, grow: 1.4, life: 44, dmg: 3.2, rehit: 6, ang: 38, kb: 4.2, sc: 2.8, fx: 'elec', dir: f.facing, fin: { dmg: 11, ang: 40, kb: 7.6, sc: 7.8 } }); sfx('whoosh'); g.shake(6); } } }),
     sspec: mv('Shoot Style Blitz', 'kick', 30, 5, [H(5, 16, 44, -46, 88, 70, 12, 34, 6.2, 7.2, { fx: 'elec' })],
@@ -990,7 +991,7 @@ mk({ id: 'todoroki', name: 'Shoto Todoroki', anime: 'My Hero Academia', title: '
     nlight_heavy: mv('Ice Pillar Upper', 'castUp', 34, 6, [H(6, 16, 32, -72, 84, 122, 13, 86, 7.4, 8.6, { fx: 'elec' })], { vfx: 'iceSpires' }),
     slight: mv('Glacier Step', 'thrust', 24, 5, [H(5, 10, 54, -44, 86, 42, 8, 28, 4.2, 2.5, { fx: 'elec' })], { vel: [[4, 9, null], [12, 2, null]], vfx: 'iceShards', chains: cS([5, 20]) }),
     slight2: mv('Flashfire Kick', 'kick', 24, 4, [H(4, 10, 58, -42, 90, 52, 9, 34, 5.0, 4.2, { fx: 'fire' })], { trail: 'foot', vfx: 'flashfire', chains: cS2([4, 20]) }),
-    slight_spec: mv('Flashfire Fist', 'thrust', 30, 5, [H(5, 16, 62, -44, 112, 66, 12.5, 36, 7.0, 7.8, { fx: 'fire' })], { vel: [[5, 18, 0]], vfx: 'flashfire' }),
+    slight_spec: mv('Heat Palm', 'thrust', 30, 5, [H(5, 16, 62, -44, 112, 66, 12.5, 36, 7.0, 7.8, { fx: 'fire' })], { vel: [[5, 18, 0]], vfx: 'flashfire' }),
     slight_heavy: mv('Wall of Flames', 'slam', 36, 7, [H(7, 18, 66, -38, 126, 86, 14.5, 44, 7.6, 9.0, { fx: 'fire' })], { vfx: 'flashfire' }),
     dlight: mv('Frost Sweep', 'sweep', 23, 5, [H(5, 10, 44, -10, 74, 28, 7.5, 72, 4.2, 1.9, { fx: 'elec' })], { trail: 'foot', vfx: 'iceShards', chains: cD([5, 19]) }),
     dlight2: mv('Rising Glacier', 'castUp', 25, 5, [H(5, 13, 34, -62, 78, 100, 9.5, 86, 5.8, 5.2, { fx: 'elec' })], { vfx: 'iceSpires' }),
@@ -1070,7 +1071,7 @@ mk({ id: 'denji', name: 'Denji', anime: 'Chainsaw Man', title: 'The Chainsaw Dev
     nlight_heavy: mv('Rising Saw', 'upslash', 34, 6, [H(6, 16, 30, -70, 86, 100, 13, 86, 7.4, 8.6, { fx: 'dark' })], { vel: [[6, 2, -12]], vfx: 'bloodSpray' }),
     slight: mv('Chainsaw Rush', 'thrust', 26, 5, [H(5, 16, 56, -43, 92, 44, 3.2, 28, 2.4, 1.2, { fx: 'dark', rehit: 3 })], { vel: [[4, 9, null], [17, 2, null]], vfx: 'sawGrind', chains: cS([5, 21]) }),
     slight2: mv('Cross Shred', 'slash', 26, 4, [H(4, 14, 60, -44, 96, 60, 3.4, 36, 2.6, 1.6, { fx: 'dark', rehit: 3 })], { vfx: 'sawGrind', chains: cS2([4, 21]) }),
-    slight_spec: mv('Full Throttle', 'spin', 34, 5, MULTI(5, 26, 54, -44, 104, 72, 2.4, 10, 38, 7.0, 7.8, 'dark', 3), { turns: 3, vel: [[5, 15, 0]], vfx: 'sawGrind' }),
+    slight_spec: mv('Throttle Lunge', 'spin', 34, 5, MULTI(5, 26, 54, -44, 104, 72, 2.4, 10, 38, 7.0, 7.8, 'dark', 3), { turns: 3, vel: [[5, 15, 0]], vfx: 'sawGrind' }),
     slight_heavy: mv('Devil Cleave', 'slam', 36, 7, [H(7, 17, 64, -40, 118, 82, 15, 42, 7.6, 9.0, { fx: 'dark' })], { vfx: 'bloodSpray' }),
     dlight: mv('Low Saw Sweep', 'lowslash', 25, 5, [H(5, 15, 46, -12, 88, 30, 3.2, 72, 2.4, 1.2, { fx: 'dark', rehit: 3 })], { vfx: 'sawGrind', chains: cD([5, 21]) }),
     dlight2: mv('Rising Shred', 'upslash', 25, 4, [H(4, 12, 32, -60, 76, 86, 9.5, 86, 5.8, 5.0, { fx: 'dark' })], { vel: [[4, 2, -10]], vfx: 'bloodSpray' }),
@@ -1084,7 +1085,7 @@ mk({ id: 'denji', name: 'Denji', anime: 'Chainsaw Man', title: 'The Chainsaw Dev
     dair: mv('Plunging Saw', 'dive', 30, 6, [H(6, 20, 32, -10, 72, 56, 2.8, -52, 2.2, 1.2, { fx: 'dark', rehit: 3 })], { land: true, vel: [[6, 4, 11]], vfx: 'sawGrind' }),
     nsig: mv('Skyward Shred', 'upslash', 46, 14, MULTI(14, 26, 28, -72, 92, 124, 3.0, 12, 86, 7.2, 9.2, 'dark', 3), { vfx: 'bloodSpray' }),
     ssig: mv('Chainsaw Charge', 'thrust', 48, 14, MULTI(14, 28, 60, -44, 118, 64, 2.8, 12.5, 38, 7.2, 9.4, 'dark', 3), { vel: [[12, 7, null], [29, 1, null]], vfx: 'sawGrind' }),
-    dsig: mv('Ground Massacre', 'slam', 50, 16, MULTI(16, 28, 50, -22, 176, 70, 2.8, 12, 62, 7.2, 9.0, 'dark', 3), { vfx: 'bloodSpray' }),
+    dsig: mv('Revving Quake', 'slam', 50, 16, MULTI(16, 28, 50, -22, 176, 70, 2.8, 12, 62, 7.2, 9.0, 'dark', 3), { vfx: 'bloodSpray' }),
     rec: mv('Saw Ascent', 'rise', 38, 6, MULTI(6, 22, 12, -52, 86, 96, 2.6, 8, 82, 5.8, 7.6, 'dark', 4), { turns: 2, grav: 0.44, vel: [[6, 2, -14]], vfx: 'sawGrind' }),
     gp: mv('Buzzsaw Drop', 'dive', 42, 8, [H(8, 34, 26, -20, 88, 62, 3.0, -58, 2.4, 1.4, { fx: 'dark', rehit: 3 })], { land: true, vel: [[8, 2, 19]], vfx: 'sawGrind' }),
     nspec: mv('Blood Whirl', 'spin', 54, 8, MULTI(8, 44, 0, -44, 136, 108, 2.2, 10.5, 50, 7.0, 8.8, 'dark', 3),
@@ -1099,6 +1100,9 @@ mk({ id: 'denji', name: 'Denji', anime: 'Chainsaw Man', title: 'The Chainsaw Dev
 ];
 
 CHARACTERS.push(SUKUNA, SHADOW_DIO, GOKU_BLACK, GOKU_UI, GASTER, DOFLAMINGO);
+// Every fighter's awakened kit is authored (see awakenKits.ts); the generated
+// template only survives as the scaffolding it replaces.
+installAwakenedKits(CHARACTERS);
 applySignatures(CHARACTERS);
 for (const c of CHARACTERS) {
   if (c.id !== 'sukuna' && c.id !== 'gojo') continue;

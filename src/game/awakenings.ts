@@ -278,7 +278,7 @@ export const AWAKENINGS: Record<string, AwakeningProfile> = {
       desc: 'A bow of lightning, drawn and loosed in one motion, and the shaft goes through the stage rather than around it.',
     },
     domain: 'A lightning arrow tears through the arena, but it is one arrow instead of a falling line.',
-    style: 'shadow', color: '#8d55ff', color2: '#7fd8ff',
+    style: 'storm', color: '#b89dff', color2: '#e6dcff',
   },
   luffy: {
     name: 'Gear Fifth',

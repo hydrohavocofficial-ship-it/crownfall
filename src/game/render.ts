@@ -1,5 +1,6 @@
 import { AnimName } from './types';
 import { drawCostume, drawPresence } from './costumes';
+import { FORMS, formCtx } from './awakenForms';
 
 export type HairStyle = 'bowl' | 'spikeShort' | 'spikeLong' | 'flame' | 'mane' | 'messy' | 'bald' | 'ponytail' | 'swept' | 'twin'
   | 'undercut' | 'wolf' | 'bob' | 'crest' | 'heart' | 'dio' | 'rose' | 'ui';
@@ -31,6 +32,12 @@ export interface Look {
   pose?: BodyPose; build?: Build; idle?: IdleStyle; run?: RunStyle; eyeStyle?: EyeStyle;
   /** Secondary trim colour used for accents, rim light and dust. */
   accent?: string;
+  /** Glove colour. Unset means bare hands in the skin colour. */
+  glove?: string;
+  /** What is on the feet. Defaults to `boots`. */
+  footwear?: 'boots' | 'shoes' | 'sandals' | 'bare' | 'tabi';
+  /** Trousers end at the knee (shorts, capris); the shin below is skin. */
+  shorts?: boolean;
 }
 
 export interface Pose {
@@ -344,6 +351,160 @@ export function limb(ctx: CanvasRenderingContext2D, pts: [number, number][], w: 
   // top-light highlight
   ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = Math.max(1, w * 0.3);
   ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y - w * 0.22) : ctx.moveTo(x, y - w * 0.22))); ctx.stroke();
+}
+
+/**
+ * A two-segment limb drawn as a tapered, cel-shaded solid rather than a tube:
+ * thick at the root, narrowing through the joint to the wrist or ankle. The
+ * lower segment is drawn first so the upper one (a sleeve, a trouser leg)
+ * overlaps it at the joint the way cloth does.
+ */
+export function taperLimb(ctx: CanvasRenderingContext2D, pts: [number, number][], widths: [number, number, number], c1: string, c2: string, split = 1) {
+  const [a, b, c] = pts;
+  const seg = (p: [number, number], q: [number, number], w0: number, w1: number, grow: number) => {
+    const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    const r0 = w0 / 2 + grow, r1 = w1 / 2 + grow;
+    ctx.beginPath();
+    ctx.moveTo(p[0] + nx * r0, p[1] + ny * r0);
+    ctx.lineTo(q[0] + nx * r1, q[1] + ny * r1);
+    // Caps sweep *outward*: through +u at the far end, through -u at the root.
+    ctx.arc(q[0], q[1], r1, Math.atan2(ny, nx), Math.atan2(-ny, -nx), true);
+    ctx.lineTo(p[0] - nx * r0, p[1] - ny * r0);
+    ctx.arc(p[0], p[1], r0, Math.atan2(-ny, -nx), Math.atan2(ny, nx), true);
+    ctx.closePath();
+  };
+  // A part-way split point lets trousers stop above the ankle (shorts, capris).
+  const m: [number, number] = [b[0] + (c[0] - b[0]) * split, b[1] + (c[1] - b[1]) * split];
+  const wm = widths[1] + (widths[2] - widths[1]) * split;
+  ctx.fillStyle = OL;
+  seg(b, c, widths[1], widths[2], 1.8); ctx.fill();
+  seg(a, b, widths[0], widths[1], 1.8); ctx.fill();
+  // Lower segment.
+  const shadeSeg = (p: [number, number], q: [number, number], w0: number, w1: number, col: string) => {
+    seg(p, q, w0, w1, 0);
+    ctx.fillStyle = col; ctx.fill();
+    ctx.save(); seg(p, q, w0, w1, 0); ctx.clip();
+    const dx = q[0] - p[0], dy = q[1] - p[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    // Cel shadow on the side away from the key light (up and to the left).
+    const sgn = ny < 0 ? -1 : 1;
+    // Butt-capped and stopped short of both joints, so two segments' shading
+    // never stacks into a dark blob at the elbow or knee.
+    const ux = dx / L, uy = dy / L, i0 = Math.min(L * 0.3, w0 * 0.5), i1 = Math.min(L * 0.3, w1 * 0.5);
+    const p0x = p[0] + ux * i0, p0y = p[1] + uy * i0, q0x = q[0] - ux * i1, q0y = q[1] - uy * i1;
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(0,0,0,.2)'; ctx.lineWidth = Math.max(w0, w1) * 0.42;
+    ctx.beginPath(); ctx.moveTo(p0x + nx * sgn * w0 * 0.4, p0y + ny * sgn * w0 * 0.4); ctx.lineTo(q0x + nx * sgn * w1 * 0.4, q0y + ny * sgn * w1 * 0.4); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.2)'; ctx.lineWidth = Math.max(1, Math.min(w0, w1) * 0.2);
+    ctx.beginPath(); ctx.moveTo(p0x - nx * sgn * w0 * 0.24, p0y - ny * sgn * w0 * 0.24); ctx.lineTo(q0x - nx * sgn * w1 * 0.24, q0y - ny * sgn * w1 * 0.24); ctx.stroke();
+    ctx.restore();
+  };
+  if (split < 1) {
+    shadeSeg(m, c, wm, widths[2], c2);
+    shadeSeg(b, m, widths[1], wm, c1);
+    // Hem line where the fabric ends.
+    const dx = c[0] - b[0], dy = c[1] - b[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    ctx.strokeStyle = OL; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(m[0] + nx * wm * 0.55, m[1] + ny * wm * 0.55); ctx.lineTo(m[0] - nx * wm * 0.55, m[1] - ny * wm * 0.55); ctx.stroke();
+    shadeSeg(a, b, widths[0], widths[1], c1);
+  } else {
+    shadeSeg(b, c, widths[1], widths[2], c2);
+    shadeSeg(a, b, widths[0], widths[1], c1);
+  }
+}
+
+/**
+ * A hand. Fists by default - these are fighters - with the knuckle ridge and
+ * a tucked thumb; an open palm for casters and palm strikes. `ang` is the
+ * forearm's direction, so the hand always continues the arm.
+ */
+export function drawStockHand(ctx: CanvasRenderingContext2D, x: number, y: number, ang: number, size: number, col: string, open: boolean) {
+  const s = size;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  const g = ctx.createLinearGradient(0, -s, 0, s);
+  g.addColorStop(0, tint(col, 1.12)); g.addColorStop(1, shade(col, 0.82));
+  if (open) {
+    // Palm with four short fingers fanned forward and a thumb out to the side.
+    for (let i = 0; i < 4; i++) {
+      const fy = (i - 1.5) * s * 0.36;
+      ctx.strokeStyle = OL; ctx.lineWidth = s * 0.42 + 2;
+      ctx.beginPath(); ctx.moveTo(s * 0.4, fy); ctx.lineTo(s * 1.35 - Math.abs(i - 1.5) * s * 0.18, fy * 1.15); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = s * 0.42;
+      ctx.beginPath(); ctx.moveTo(s * 0.4, fy); ctx.lineTo(s * 1.35 - Math.abs(i - 1.5) * s * 0.18, fy * 1.15); ctx.stroke();
+    }
+    ctx.fillStyle = g; ctx.strokeStyle = OL; ctx.lineWidth = 1.7;
+    ctx.beginPath(); ctx.ellipse(s * 0.2, 0, s * 0.72, s * 0.78, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = OL; ctx.lineWidth = s * 0.4 + 2;
+    ctx.beginPath(); ctx.moveTo(0, -s * 0.5); ctx.lineTo(s * 0.55, -s * 1.1); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = s * 0.4;
+    ctx.beginPath(); ctx.moveTo(0, -s * 0.5); ctx.lineTo(s * 0.55, -s * 1.1); ctx.stroke();
+  } else {
+    // Fist: a squared mass, four knuckle bumps on the leading edge, the thumb
+    // wrapped across the front.
+    ctx.fillStyle = g; ctx.strokeStyle = OL; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.roundRect(-s * 0.55, -s * 0.8, s * 1.55, s * 1.6, s * 0.5); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.9;
+    for (let i = 1; i < 4; i++) { const fy = -s * 0.8 + i * s * 0.4; ctx.beginPath(); ctx.moveTo(s * 0.55, fy); ctx.lineTo(s * 1.0, fy); ctx.stroke(); }
+    ctx.fillStyle = shade(col, 0.9); ctx.strokeStyle = OL; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(s * 0.28, s * 0.42, s * 0.5, s * 0.26, -0.3, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    ctx.beginPath(); ctx.ellipse(s * 0.5, -s * 0.5, s * 0.34, s * 0.14, 0, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * Footwear, planted flat on the floor when standing and pointed with the shin
+ * in the air. `boots` rise over the ankle, `shoes` are low and pointed,
+ * `sandals` and `bare` show the foot, `tabi` is the split-toe ninja/samurai
+ * sock with a strapped sandal.
+ */
+export function drawFootwear(ctx: CanvasRenderingContext2D, knee: [number, number], foot: [number, number], style: NonNullable<Look['footwear']>, col: string, skin: string, grounded: boolean, w: number) {
+  const shin = Math.atan2(foot[1] - knee[1], foot[0] - knee[0]);
+  const ang = grounded ? 0 : Math.max(-0.2, Math.min(0.9, shin - Math.PI / 2));
+  ctx.save(); ctx.translate(foot[0], foot[1]); ctx.rotate(ang);
+  ctx.lineJoin = 'round';
+  const L = w * 1.55, H = w * 0.62;
+  const sole = () => {
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.5, -H);
+    ctx.quadraticCurveTo(L * 0.5, -H * 1.15, L, -H * 0.2);
+    ctx.quadraticCurveTo(L + 1.2, H * 0.3, L - 1, H * 0.45);
+    ctx.lineTo(-w * 0.55, H * 0.45);
+    ctx.closePath();
+  };
+  if (style === 'bare' || style === 'sandals') {
+    sole();
+    ctx.fillStyle = skin; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 0.8;
+    for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(L - 1 - i * 1.8, -H * 0.1); ctx.lineTo(L - 1 - i * 1.8, H * 0.35); ctx.stroke(); }
+    if (style === 'sandals') {
+      ctx.fillStyle = col; ctx.strokeStyle = OL; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.rect(-w * 0.55, H * 0.35, L + w * 0.5, 2.2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = col; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(L * 0.5, -H * 0.9); ctx.lineTo(L * 0.7, H * 0.35); ctx.moveTo(L * 0.5, -H * 0.9); ctx.lineTo(L * 0.2, H * 0.35); ctx.stroke();
+    }
+  } else if (style === 'tabi') {
+    sole();
+    ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(L * 0.72, -H * 0.5); ctx.lineTo(L * 0.72, H * 0.4); ctx.stroke();
+    ctx.fillStyle = '#6b4a2e'; ctx.fillRect(-w * 0.55, H * 0.3, L + w * 0.5, 2);
+  } else {
+    // Boots and shoes: a solid leather upper with a lit toe and a dark sole.
+    const g = ctx.createLinearGradient(0, -H, 0, H);
+    g.addColorStop(0, tint(col, 1.18)); g.addColorStop(1, shade(col, 0.72));
+    if (style === 'boots') {
+      ctx.fillStyle = g; ctx.strokeStyle = OL; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.roundRect(-w * 0.6, -H - w * 0.9, w * 1.15, w * 1.2, 2); ctx.fill(); ctx.stroke();
+    }
+    sole();
+    ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = OL; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.fillStyle = shade(col, 0.45); ctx.fillRect(-w * 0.55, H * 0.1, L + w * 0.5, H * 0.35);
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    ctx.beginPath(); ctx.ellipse(L * 0.6, -H * 0.55, L * 0.2, H * 0.18, -0.2, 0, 7); ctx.fill();
+  }
+  ctx.restore();
 }
 
 const HAIR: Record<HairStyle, [number, number, number][]> = {
@@ -936,7 +1097,15 @@ function drawFighterDetails(ctx: CanvasRenderingContext2D, f: any, L: Look, head
 }
 
 export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, time: number, showHit = false) {
-  const L: Look = f.look;
+  // The awakened form can repaint part of the look (Gear Fifth's white hair,
+  // Kurama's gold cloak). Cached per source look so a thirty-second state does
+  // not allocate a new object every frame.
+  const form = f.awakened ? FORMS[f.def?.styleId || f.def?.id || ''] : undefined;
+  let L: Look = f.look;
+  if (form?.look) {
+    if (!f.formLook || f.formLook.src !== f.look) f.formLook = { src: f.look, look: { ...f.look, ...form.look } };
+    L = f.formLook.look;
+  }
   const s = f.scale;
   const B = buildOf(L);
   ctx.save();
@@ -1031,6 +1200,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
     bodyLook = f.uiLook.look;
   }
   drawPresence(ctx, identity, bodyLook, time, devil || god, f.state === 'attack');
+  const fk = form ? formCtx({ f, L, pose, time, B, hx, hy, cy, neck, sh, head, elF, haF, elB, haB, kneeF, footF, kneeB, footB, limbW, legW }, 12.2 * B.head) : null;
+  if (form?.back && fk) { ctx.save(); form.back(ctx, fk); ctx.restore(); }
 
   // ---- COSMIC ULTRA INSTINCT AURA -----------------------------------------
   // A silver-haired fighter never fully powers down, and everything that raises
@@ -1062,7 +1233,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   if (devil || god || f.auraT > 0 || techniqueActive) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const col = devil ? 'rgba(220,20,50,' : god ? 'rgba(120,210,255,' : techniqueActive ? 'rgba(255,255,255,' : 'rgba(180,110,255,';
+    const formCol = form ? hexA(form.aura, 1).replace(/,1\)$/, ',') : '';
+    const col = devil ? 'rgba(220,20,50,' : god ? 'rgba(120,210,255,' : form ? formCol : techniqueActive ? 'rgba(255,255,255,' : 'rgba(180,110,255,';
     for (let i = 0; i < 3; i++) {
       const r = 48 + Math.sin(time * 0.3 + i * 2) * 7 + i * 8;
       const g = ctx.createRadialGradient(0, cy, 4, 0, cy, r);
@@ -1073,7 +1245,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
     for (let i = 0; i < 4; i++) {
       const p = ((time * 0.04 + i * 0.25) % 1);
       ctx.globalAlpha = (1 - p) * 0.5;
-      ctx.fillStyle = devil ? '#ff2a4a' : god ? '#9fe6ff' : techniqueActive ? L.energy : '#c79dff';
+      ctx.fillStyle = devil ? '#ff2a4a' : god ? '#9fe6ff' : form ? form.aura : techniqueActive ? L.energy : '#c79dff';
       const wx = Math.sin(i * 2.4 + time * 0.1) * 22;
       ctx.beginPath(); ctx.ellipse(wx, hy - p * 90, 3.5 * (1 - p) + 1, 10 * (1 - p) + 3, 0, 0, 7); ctx.fill();
     }
@@ -1091,7 +1263,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   ctx.globalCompositeOperation = 'lighter';
   const rimA = devil || god ? 0.5 : techniqueActive ? 0.4 : f.auraT > 0 ? 0.3 : 0.16;
   ctx.globalAlpha = rimA;
-  ctx.strokeStyle = devil ? '#ff2a4a' : god ? '#9fe6ff' : L.energy;
+  ctx.strokeStyle = devil ? '#ff2a4a' : god ? '#9fe6ff' : form ? form.aura : L.energy;
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.lineWidth = 4.5;
   ctx.beginPath();
@@ -1099,10 +1271,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   ctx.moveTo(hx, hy); ctx.lineTo(kneeF[0], kneeF[1]); ctx.lineTo(footF[0], footF[1]);
   ctx.moveTo(sh[0], sh[1]); ctx.lineTo(elF[0], elF[1]); ctx.lineTo(haF[0], haF[1]);
   ctx.stroke();
-  // The head ring tracks the real skull radius instead of a hard-coded 13, and
-  // sits just outside the silhouette so it reads as an edge, not a shell.
-  ctx.lineWidth = 3.2;
-  ctx.beginPath(); ctx.arc(head[0], head[1], 12.2 * B.head + 1.2, 0, 7); ctx.stroke();
+  // No ring around the head: at sprite scale a stroked circle behind the skull
+  // reads as a dark halo, not a rim. The head gets its rim from the hair pass.
   ctx.restore();
 
   // ---- devil wing ----
@@ -1150,10 +1320,16 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   // `sleeve: 'none'` is a shirtless fighter: the upper arm is bare skin, not an
   // unpainted fill that would silently inherit the previous stroke colour.
   const sleeveC = L.sleeve === 'none' ? L.skin : L.sleeve;
+  const handCol = L.glove || L.skin;
+  const castAnim = f.state === 'attack' && /^(palm|cast|castUp|counter)$/.test(f.move?.anim || '');
+  const openHands = castAnim || (L.pose === 'mage' && f.state !== 'attack');
   // back arm + back weapon
-  limb(ctx, [sh, elB, haB], limbW, shade(sleeveC), shade(L.fore));
+  const foreB = L.fore === L.sleeve ? sleeveC : L.fore;
+  taperLimb(ctx, [sh, elB, haB], [limbW * 1.12, limbW * 0.92, limbW * 0.74], shade(sleeveC), shade(foreB));
+  drawStockHand(ctx, haB[0], haB[1], Math.atan2(haB[1] - elB[1], haB[0] - elB[0]), 3.9 * B.limb, shade(handCol), openHands);
   if (L.weapon === 'dual' || L.weapon === 'triple') drawWeapon(ctx, 'dual', haB, pose.aB[1] + 0.35, f, time, true);
-  limb(ctx, [[hx - 2, hy], kneeB, footB], legW, shade(L.pants), shade(L.boots));
+  taperLimb(ctx, [[hx - 2, hy], kneeB, footB], [legW * 1.14, legW * 0.9, legW * 0.72], shade(L.pants), shade(L.shorts ? L.skin : L.pants), L.shorts ? 0.12 : 1);
+  drawFootwear(ctx, kneeB, footB, L.footwear || 'boots', shade(L.boots), shade(L.skin), f.grounded, legW);
 
   // ---- tapered anime torso ----
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -1269,8 +1445,8 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   }
 
   // front leg
-  limb(ctx, [[hx, hy], kneeF, footF], legW, L.pants, L.boots);
-  ctx.strokeStyle = OL; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(footF[0] - 2, footF[1] - 2); ctx.lineTo(footF[0] + 4, footF[1] - 2); ctx.stroke();
+  taperLimb(ctx, [[hx, hy], kneeF, footF], [legW * 1.16, legW * 0.92, legW * 0.74], L.pants, L.shorts ? L.skin : L.pants, L.shorts ? 0.12 : 1);
+  drawFootwear(ctx, kneeF, footF, L.footwear || 'boots', L.boots, L.skin, f.grounded, legW);
 
   // ---- head ----
   const hr = 12.2 * B.head;
@@ -1403,11 +1579,12 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
 
   drawFighterDetails(ctx, f, L, head, neck, sh, hy);
   drawCostume(ctx, identity, L, head, sh, hy, time, devil || god);
+  if (form?.front && fk) { ctx.save(); form.front(ctx, fk); ctx.restore(); }
 
   // front arm + weapon
-  limb(ctx, [sh, elF, haF], 7.2, sleeveC, L.fore);
-  ctx.fillStyle = L.skin; ctx.strokeStyle = OL; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.ellipse(haF[0], haF[1], 4.1, 3.7, 0, 0, 7); ctx.fill(); ctx.stroke();
+  const foreF = L.fore === L.sleeve ? sleeveC : L.fore;
+  taperLimb(ctx, [sh, elF, haF], [7.6 * B.limb, 6.6 * B.limb, 5.4 * B.limb], sleeveC, foreF);
+  drawStockHand(ctx, haF[0], haF[1], Math.atan2(haF[1] - elF[1], haF[0] - elF[0]), 4.1 * B.limb, handCol, openHands && L.weapon === 'fists');
   const tip = drawWeapon(ctx, L.weapon, haF, pose.wep, f, time, false);
 
   publishTips(tip || haF);
@@ -1419,9 +1596,10 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   ctx.globalAlpha = .3;
   ctx.strokeStyle = devil ? '#ff5a70' : uiForm ? '#ffffff' : god ? '#9fe6ff' : tint(L.energy, 1.15);
   ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  // Down the leading edge of the torso only - never across the face.
   ctx.beginPath();
-  ctx.moveTo(head[0] + 7, head[1] - 2);
-  ctx.quadraticCurveTo(sh[0] + 10, sh[1] + 6, sh[0] + 7, hy - 2);
+  ctx.moveTo(sh[0] + 9, sh[1] + 2);
+  ctx.quadraticCurveTo(sh[0] + 11, (sh[1] + hy) / 2, hx + 7, hy - 2);
   ctx.stroke();
   ctx.restore();
 

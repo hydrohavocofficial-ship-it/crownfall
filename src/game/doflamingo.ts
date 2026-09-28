@@ -624,7 +624,7 @@ const core: CoreKit = {
   nlight: mv('String Slice', 'slash', 16, 4, [H(4, 7, 50, -50, 66, 40, 5, 38, 3.0, 1.8)], { chains: cN([4, 14]) }),
   nlight2: mv('Backhand Thread', 'backslash', 17, 3, [H(3, 7, 54, -48, 70, 44, 5.5, 42, 3.3, 2.1)], { chains: cN2([3, 15]) }),
   nlight3: mv('Heavenly Demon Kick', 'roundhouse', 26, 5, [H(5, 11, 46, -44, 78, 56, 9.5, 42, 6.2, 7.2, { fx: 'blunt' })], { threads: false }),
-  nlight_spec: mv('Tamaito', 'palm', 26, 6, [], {
+  nlight_spec: mv('Finger Shot', 'palm', 26, 6, [], {
     vfx: 'doffyCast', desc: 'A single bullet of wound string off the fingertip.',
     onFrame: (f, fr, g) => { if (fr === 6) tamaito(f, g, 15, aimVy(g, f, 15), { dmg: 7, kb: 5.6, sc: 6 }); },
   }),
@@ -649,7 +649,7 @@ const core: CoreKit = {
   // ---- air ----
   nair: mv('Sky Walk Spin', 'spinKick', 22, 3, [H(3, 11, 0, -42, 104, 88, 6, 66, 3.4, 2.1, { fx: 'blunt', rehit: 6 })], { land: true, turns: 1, threads: false, chains: cA([3, 17]) }),
   nair2: mv('Heel Drop', 'axeKick', 23, 3, [H(3, 11, 24, -20, 64, 58, 8, -52, 4.4, 3.6, { fx: 'blunt' })], { land: true, vel: [[3, 2, 8]], threads: false }),
-  nair_spec: mv('Fulbright', 'castUp', 28, 6, [], {
+  nair_spec: mv('Sky Thread Drop', 'castUp', 28, 6, [], {
     vfx: 'doffyCast', desc: 'Two strings shot down out of the sky onto the ground ahead.',
     onFrame: (f, fr, g) => { if (fr === 6) { fulbright(g, f, f.x + f.facing * 70, 8, { dmg: 6, ang: -60, kb: 5, sc: 5 }); fulbright(g, f, f.x + f.facing * 130, 12, { dmg: 6, ang: -60, kb: 5, sc: 5 }); } },
   }),
@@ -886,7 +886,7 @@ export const DOFLAMINGO: CharDef = {
   look, moves,
   moveBranches: [
     { input: 'J → J → J', name: 'String Slice Chain', desc: 'String Slice → Backhand Thread → Heavenly Demon Kick.' },
-    { input: 'J → L', name: 'Tamaito', desc: 'Cancels the string into a single string bullet.' },
+    { input: 'J → L', name: 'Finger Shot', desc: 'Cancels the string into a single string bullet.' },
     { input: '→ J → L', name: 'Sora no Michi Rush', desc: 'Strides forward on the sky mid-string.' },
     { input: 'L / → L / ↓ L', name: 'Tamaito · Overheat · Parasite', desc: 'String bullets, the burning rope, and the puppet hold.' },
     { input: 'R @ full gauge', name: 'Awakening: String World', desc: 'Every button reaches for a bigger string technique.' },

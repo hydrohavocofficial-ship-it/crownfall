@@ -1082,7 +1082,7 @@ export class Game {
     // Respawning is not a fresh awakening: a fighter who fell mid-state comes back
     // out of the state with a clean set of cooldowns - but the gauge they had
     // built is kept exactly where it was (see `ko`).
-    f.awakened = false; f.awakenLock = 0; f.juggleLeft = JUGGLE_BUDGET;
+    f.awakened = false; f.awakenLock = 0; f.juggleLeft = JUGGLE_BUDGET; f.buffT = 0;
     for (const key of Object.keys(f.cds)) f.cds[key] = 0;
     this.fx.ring(f.x, f.y - 40, 10, 70, f.color, 24, 6);
     this.fx.burst(f.x, f.y - 40, 20, f.color, 6, 'glow', 26, 5);

@@ -19,7 +19,7 @@ const cSA = (window: [number, number]) => ({ light: 'sair2', special: 'sair_spec
 const look = {
   skin: '#f3d5c2', hair: '#e34b68', hair2: '#7b102d', hairStyle: 'spikeLong' as const,
   top: '#f1e8dc', top2: '#25253f', sleeve: '#dedbd5', fore: '#e9c9b7', pants: '#d0cfda', boots: '#20202c',
-  eye: '#ff3857', weapon: 'claws' as const, mark: 'none' as const,
+  eye: '#ff3857', weapon: 'claws' as const, mark: 'none' as const, footwear: 'shoes' as const,
   energy: '#ff2347', energy2: '#ffd0c8', ninjaRun: true,
 };
 

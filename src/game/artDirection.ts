@@ -165,11 +165,43 @@ export const ANIMS: Record<string, Record<string, AnimName>> = {
 const UNTOUCHED = new Set(['sukuna']);
 
 /** Applies art direction to the whole roster. Safe to call once at build time. */
+/**
+ * Wardrobe below the wrist and the knee: gloves, footwear, and where the
+ * trousers stop. Small at sprite scale, but it is most of what makes two
+ * fighters with the same body read as different people.
+ */
+export const WARDROBE: Record<string, Partial<Pick<Look, 'glove' | 'footwear' | 'shorts' | 'boots'>>> = {
+  levi: { footwear: 'boots' },
+  killua: { footwear: 'shoes', boots: '#3b2f5c' },
+  rengoku: { footwear: 'tabi', boots: '#f2efe6' },
+  madara: { footwear: 'sandals', boots: '#1f2438' },
+  asta: { footwear: 'boots' },
+  goku: { footwear: 'boots', boots: '#1f3f9a' },
+  ichigo: { footwear: 'tabi', boots: '#f1efe8' },
+  naruto: { footwear: 'sandals', boots: '#1b1b24' },
+  tanjiro: { footwear: 'tabi', boots: '#e9e4d6' },
+  sasuke: { footwear: 'sandals', boots: '#25283a' },
+  luffy: { footwear: 'sandals', boots: '#8a5a2b', shorts: true },
+  zoro: { footwear: 'boots', boots: '#1d1d24' },
+  saitama: { footwear: 'boots', boots: '#d8302c', glove: '#d8302c' },
+  gojo: { footwear: 'shoes', boots: '#15161d' },
+  yuji: { footwear: 'shoes', boots: '#d9d4cf' },
+  deku: { footwear: 'boots', boots: '#e0302c' },
+  todoroki: { footwear: 'boots', boots: '#2a2d3a' },
+  eren: { footwear: 'boots', boots: '#3a2616' },
+  denji: { footwear: 'shoes', boots: '#1b1b20' },
+  shadowdio: { footwear: 'boots', boots: '#e8c33a' },
+  gokublack: { footwear: 'boots', boots: '#e5e7eb' },
+  goku_ui: { footwear: 'boots', boots: '#1f3f9a' },
+};
+
 export function applyArtDirection(defs: CharDef[]) {
   for (const def of defs) {
     if (UNTOUCHED.has(def.id)) continue;
     const art = ART[def.id];
     if (art) def.look = { ...def.look, ...art };
+    const ward = WARDROBE[def.id];
+    if (ward) def.look = { ...def.look, ...ward };
     const swaps = ANIMS[def.id];
     if (swaps) {
       for (const m of Object.values(def.moves)) {

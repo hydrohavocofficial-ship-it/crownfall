@@ -35,6 +35,12 @@ export class Fighter {
   meter = 0; cds: Record<string, number> = { nspec: 0, sspec: 0, dspec: 0, naw: 0, saw: 0, daw: 0, aaw: 0, nwl: 0, swl: 0, dwl: 0, awl: 0, nwh: 0, swh: 0, dwh: 0, awh: 0, nfu: 0, sfu: 0, dfu: 0, afu: 0, aspec: 0, aig: 0, boss_heavy2: 0 };
   godT = 0; devilT = 0; auraT = 0;
   /**
+   * A timed power-up granted by an awakened technique (Gear Second, Kaioken,
+   * Full Cowl...). Multiplies speed and damage while `buffT` runs; ends with the
+   * Awakening, on a knockout and on respawn.
+   */
+  buffT = 0; buffSpeed = 1; buffDmg = 1; buffCol = '';
+  /**
    * AWAKENED.
    *
    * Set the frame a full gauge is spent, cleared when the gauge empties or the
@@ -129,13 +135,13 @@ export class Fighter {
   }
 
   speedMul() {
-    return (this.godT > 0 ? 1.4 : 1) * (this.devilT > 0 ? 1.12 : 1) * (this.awakened ? AWAKEN_SPEED : 1);
+    return (this.godT > 0 ? 1.4 : 1) * (this.devilT > 0 ? 1.12 : 1) * (this.awakened ? AWAKEN_SPEED : 1) * (this.buffT > 0 ? this.buffSpeed : 1);
   }
   dmgMul() {
     // The Awakening's own bonus is deliberately small. The power is supposed to
     // be in the moveset it grants; a flat multiplier on top of a stronger kit is
     // how a transformation quietly doubles a character's output.
-    return (this.devilT > 0 ? 1.3 : this.godT > 0 ? 1.1 : 1) * (this.awakened ? AWAKEN_DAMAGE : 1);
+    return (this.devilT > 0 ? 1.3 : this.godT > 0 ? 1.1 : 1) * (this.awakened ? AWAKEN_DAMAGE : 1) * (this.buffT > 0 ? this.buffDmg : 1);
   }
 
   /**
@@ -150,6 +156,7 @@ export class Fighter {
     this.awakened = false;
     this.meter = 0;
     this.auraT = 0;
+    this.buffT = 0;
     this.awakenSealedT = AWAKEN_SEAL;
     // A pending transformation is cancelled outright: it is the same resource.
     this.move = null; this.moveKey = null;
@@ -370,6 +377,10 @@ export class Fighter {
     if (this.godT > 0) { this.godT--; if (this.animT % 3 === 0) g.fx.bolt(this.x, this.y - 40, this.x + (Math.random() - .5) * 70, this.y - 40 + (Math.random() - .5) * 90, '#7fd8ff', 4, 1.5); }
     if (this.devilT > 0) { this.devilT--; if (this.animT % 2 === 0) g.fx.add({ x: this.x + (Math.random() - .5) * 36, y: this.y - Math.random() * 80, vy: -1.5, color: Math.random() < .5 ? '#150306' : '#c0102a', kind: Math.random() < .5 ? 'smoke' : 'glow', life: 26, size: 7 }); }
     if (this.auraT > 0) this.auraT--;
+    if (this.buffT > 0) {
+      this.buffT--;
+      if (this.animT % 4 === 0 && this.buffCol) g.fx.add({ x: this.x + (Math.random() - .5) * 30, y: this.y - Math.random() * 70, vx: 0, vy: -1.8, color: this.buffCol, kind: 'glow', life: 16, size: 4 });
+    }
     if (this.evadeT > 0) this.evadeT--;
     if (this.evadeCD > 0) this.evadeCD--;
     // ---- motion after-images -------------------------------------------------
