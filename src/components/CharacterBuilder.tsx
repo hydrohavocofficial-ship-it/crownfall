@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Btn, Header, ScreenBG } from './ui';
-import { BASE_CHARACTERS } from '../game/characters';
+import { BASE_CHARACTERS, shortName } from '../game/characters';
 import { ANIMS, POSES, drawFighter, lerpPose, runPose, HairStyle, Weapon, Mark, Look, Pose } from '../game/render';
 import { CustomCfg, STAT_POINTS, deleteCustom, loadCustomCfgs, newCustomCfg, saveCustom } from '../game/custom';
 import { sfx } from '../game/audio';
@@ -339,7 +339,7 @@ export default function CharacterBuilder({ onBack, onPlay }: Props) {
                       className={`relative border-2 overflow-hidden cursor-pointer transition text-left ${cfg.style === c.id ? 'scale-[1.04]' : 'border-black opacity-75 hover:opacity-100'}`}
                       style={{ borderColor: cfg.style === c.id ? cfg.color : undefined }}>
                       <img src={c.portrait} alt="" className="w-full aspect-square object-cover object-top" />
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black to-transparent px-1 pt-3 font-display text-[11px] leading-tight">{c.name.split(' ')[0].toUpperCase()}</div>
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black to-transparent px-1 pt-3 font-display text-[11px] leading-tight">{shortName(c)}</div>
                     </button>
                   ))}
                 </div>

@@ -377,14 +377,14 @@ const branches = [
   { input: '↓ J → J / L', name: generated.dlight2.name!, desc: `${generated.dlight.name} extends into ${generated.dlight2.name} or ${generated.dlight_spec.name}.` },
   { input: 'Air J → J / L', name: generated.nair2.name!, desc: `${generated.nair.name} chains into ${generated.nair2.name} or ${generated.nair_spec.name}.` },
   { input: 'R @ full gauge · N / → / ↓ / Air', name: `${generated.naw.name} Stances`, desc: `Spends the whole gauge to Awaken. Direction picks the transformation stance: ${generated.naw.name}, ${generated.saw.name}, ${generated.daw.name}, ${generated.aaw.name}.` },
-  { input: 'AWAKENED · J / K / L', name: `${generated.nwl.name} → ${generated.nwh.name} → ${generated.nfu.name}`, desc: 'A second kit for a second stance. The awakened special is the Supreme Godly Display, shortened and halved so it fits inside a fifteen-second Awakening.' },
+  { input: 'AWAKENED · J / K / L', name: `${generated.nwl.name} → ${generated.nwh.name} → ${generated.nfu.name}`, desc: 'A second kit for a second stance. The awakened special is the Supreme Godly Display, shortened and halved so it fits inside a thirty-second Awakening.' },
 ];
 
 const abilities = [
   { key: 'L · Neutral Special', name: generated.nspec.name!, desc: generated.nspec.desc! },
   { key: 'L · Side Special', name: generated.sspec.name!, desc: generated.sspec.desc! },
   { key: 'L · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
-  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about thirty seconds; at zero the Awakening ends.` },
   { key: 'AWAKENED · J · Light', name: generated.nwl.name!, desc: generated.nwl.desc! },
   { key: 'AWAKENED · K · Heavy', name: generated.nwh.name!, desc: generated.nwh.desc! },
   { key: 'AWAKENED · L · Display', name: generated.nfu.name!, desc: generated.nfu.desc! },

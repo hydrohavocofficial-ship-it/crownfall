@@ -13,6 +13,7 @@ import { SUKUNA } from './sukuna';
 import { SHADOW_DIO } from './shadowdio';
 import { GOKU_BLACK } from './gokublack';
 import { GOKU_UI } from './goku_ui';
+import { GASTER } from './gaster';
 import { applyArtDirection } from './artDirection';
 import { installBossKit } from './bossKits';
 
@@ -38,6 +39,8 @@ export type CoreKit = Record<CoreMoveKey, MoveDef> & { ult?: MoveDef };
 export interface MoveVariantBranch { input: string; name: string; desc: string }
 export interface CharDef {
   id: string; styleId?: string; name: string; anime: string; title: string; desc: string;
+  /** The one word the HUD and the select grid print, when it is not the first word of `name`. */
+  short?: string;
   color: string; portrait: string; tier?: string;
   stats: { speed: number; air: number; jump: number; weight: number; scale: number; gravity: number };
   statBars: { power: number; speed: number; range: number; defense: number };
@@ -125,7 +128,7 @@ function mk(s: Spec): CharDef {
       { key: 'L · Neutral Special', name: m.nspec.name!, desc: m.nspec.desc! },
       { key: 'L · Side Special', name: m.sspec.name!, desc: m.sspec.desc! },
       { key: 'L · Down Special', name: m.dspec.name!, desc: m.dspec.desc! },
-      { key: 'R · Awaken (full gauge)', name: m.naw.name!, desc: `${m.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+      { key: 'R · Awaken (full gauge)', name: m.naw.name!, desc: `${m.naw.desc} The gauge drains from full to empty over about thirty seconds; at zero the Awakening ends.` },
       { key: 'AWAKENED · J · Light', name: m.nwl.name!, desc: m.nwl.desc! },
       { key: 'AWAKENED · K · Heavy', name: m.nwh.name!, desc: m.nwh.desc! },
       { key: 'AWAKENED · L · Special', name: m.nfu.name!, desc: m.nfu.desc! },
@@ -1092,7 +1095,7 @@ mk({ id: 'denji', name: 'Denji', anime: 'Chainsaw Man', title: 'The Chainsaw Dev
   ai: { horizSpec: 'sspec', zoneSpec: 'nspec', ultRange: 380 } }),
 ];
 
-CHARACTERS.push(SUKUNA, SHADOW_DIO, GOKU_BLACK, GOKU_UI);
+CHARACTERS.push(SUKUNA, SHADOW_DIO, GOKU_BLACK, GOKU_UI, GASTER);
 applySignatures(CHARACTERS);
 for (const c of CHARACTERS) {
   if (c.id !== 'sukuna' && c.id !== 'gojo') continue;
@@ -1103,7 +1106,7 @@ for (const c of CHARACTERS) {
     { key: 'Side + L', name: m.sspec.name!, desc: m.sspec.desc! },
     { key: 'Down + L', name: m.dspec.name!, desc: m.dspec.desc! },
     { key: 'Air + L', name: m.aspec!.name!, desc: m.aspec!.desc! },
-    { key: 'R · Awaken (full gauge)', name: m.naw.name!, desc: `${m.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+    { key: 'R · Awaken (full gauge)', name: m.naw.name!, desc: `${m.naw.desc} The gauge drains from full to empty over about thirty seconds; at zero the Awakening ends.` },
     { key: 'AWAKENED · J · Light', name: m.nwl.name!, desc: m.nwl.desc! },
     { key: 'AWAKENED · K · Heavy', name: m.nwh.name!, desc: m.nwh.desc! },
     { key: 'AWAKENED · L · Finisher', name: m.boss_finisher!.name!, desc: m.boss_finisher!.desc! },
@@ -1124,5 +1127,8 @@ applyArtDirection(CHARACTERS);
 
 /** Snapshot of the built-in roster (used by the character builder as source kits). */
 export const BASE_CHARACTERS: CharDef[] = CHARACTERS.slice();
+
+/** The single word a HUD plate or a select tile prints for a fighter. */
+export const shortName = (c: { name: string; short?: string }) => (c.short || c.name.split(' ')[0]).toUpperCase();
 
 export const charById = (id: string) => CHARACTERS.find((c) => c.id === id) || CHARACTERS[0];

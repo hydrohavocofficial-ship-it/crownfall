@@ -273,7 +273,7 @@ export function applySignatures(chars: any[]) {
       { key: 'L · Neutral Special', name: m.nspec.name, desc: m.nspec.desc },
       { key: 'L · Side Special', name: m.sspec.name, desc: m.sspec.desc },
       { key: 'L · Down Special', name: m.dspec.name, desc: m.dspec.desc },
-      { key: 'R · Awaken (full gauge)', name: m.naw.name, desc: `${m.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+      { key: 'R · Awaken (full gauge)', name: m.naw.name, desc: `${m.naw.desc} The gauge drains from full to empty over about thirty seconds; at zero the Awakening ends.` },
       { key: 'AWAKENED · J · Light', name: m.nwl.name, desc: m.nwl.desc },
       { key: 'AWAKENED · K · Heavy', name: m.nwh.name, desc: m.nwh.desc },
       { key: 'AWAKENED · L · Special', name: m.nfu.name, desc: m.nfu.desc },

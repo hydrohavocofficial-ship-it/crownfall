@@ -252,7 +252,7 @@ const abilities = [
   { key: 'L · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
   { key: 'L · Aerial Special', name: generated.sair_spec.name!, desc: generated.sair_spec.desc! },
   { key: 'K · Neutral Heavy', name: generated.nsig.name!, desc: generated.nsig.desc! },
-  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about thirty seconds; at zero the Awakening ends.` },
   { key: 'AWAKENED · J · Light', name: generated.nwl.name!, desc: generated.nwl.desc! },
   { key: 'AWAKENED · K · Heavy', name: generated.nwh.name!, desc: generated.nwh.desc! },
   { key: 'AWAKENED · L · Za Warudo', name: generated.nfu.name!, desc: generated.nfu.desc! },

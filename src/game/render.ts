@@ -284,30 +284,53 @@ export function computePose(f: any): Pose {
 }
 
 // ---------------- drawing ----------------
-const OL = '#0b0b10';
+export const OL = '#0b0b10';
+
+/**
+ * The resolved skeleton of one fighter for one frame, in body space (origin at
+ * the feet, facing right, already scaled). A bespoke body renderer draws from
+ * these joints, so it animates through every shared move exactly like the stock
+ * model does - it only replaces what the joints are *dressed* in.
+ */
+export interface Skeleton {
+  f: any; L: Look; pose: Pose; time: number; B: Build;
+  hx: number; hy: number; cy: number;
+  neck: [number, number]; sh: [number, number]; head: [number, number];
+  elF: [number, number]; haF: [number, number]; elB: [number, number]; haB: [number, number];
+  kneeF: [number, number]; footF: [number, number]; kneeB: [number, number]; footB: [number, number];
+  limbW: number; legW: number;
+}
+/**
+ * Returns the weapon/hand tip the engine should track for trails, or null to
+ * use the front hand.
+ */
+export type BodyRenderer = (ctx: CanvasRenderingContext2D, k: Skeleton) => [number, number] | null;
+const CUSTOM_BODIES: Record<string, BodyRenderer> = {};
+/** Registers a fully bespoke body for a character id (see `Skeleton`). */
+export function registerBody(id: string, fn: BodyRenderer) { CUSTOM_BODIES[id] = fn; }
 /** Shadow DIO's signature gold; shared by the coat, clasps and Stand trim. */
 const GOLD_TRIM = '#ffe45c';
 /** Alpha applied to a `#rrggbb` colour, for translucent glows. */
-function hexA(hex: string, a: number) {
+export function hexA(hex: string, a: number) {
   if (hex[0] !== '#') return hex;
   const n = parseInt(hex.slice(1, 7), 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 const pt = (x: number, y: number, a: number, l: number): [number, number] => [x + Math.sin(a) * l, y + Math.cos(a) * l];
 
-function shade(c: string, k = 0.72) {
+export function shade(c: string, k = 0.72) {
   if (c[0] !== '#' || c.length < 7) return c;
   const n = parseInt(c.slice(1, 7), 16);
   return `rgb(${Math.floor(((n >> 16) & 255) * k)},${Math.floor(((n >> 8) & 255) * k)},${Math.floor((n & 255) * k)})`;
 }
-function tint(c: string, k = 1.35) {
+export function tint(c: string, k = 1.35) {
   if (c[0] !== '#' || c.length < 7) return c;
   const n = parseInt(c.slice(1, 7), 16);
   const m = (v: number) => Math.min(255, Math.floor(v * k));
   return `rgb(${m((n >> 16) & 255)},${m((n >> 8) & 255)},${m(n & 255)})`;
 }
 
-function limb(ctx: CanvasRenderingContext2D, pts: [number, number][], w: number, c: string, c2?: string) {
+export function limb(ctx: CanvasRenderingContext2D, pts: [number, number][], w: number, c: string, c2?: string) {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.strokeStyle = OL; ctx.lineWidth = w + 3.6;
   ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
@@ -956,6 +979,35 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   const devil = f.devilT > 0, god = f.godT > 0;
   const techniqueActive = f.state === 'attack' && !!f.move?.ability && f.move.ability !== 'special';
   const identity = f.def?.styleId || f.def?.id || '';
+
+  const unrot = (lx: number, ly: number): [number, number] => {
+    if (!pose.rot) return [lx, ly];
+    const dy = ly - cy, c = Math.cos(pose.rot), sn = Math.sin(pose.rot);
+    return [lx * c - dy * sn, lx * sn + dy * c + cy];
+  };
+  const publishTips = (tipLocal: [number, number]) => {
+    const [tx2, ty2] = unrot(tipLocal[0], tipLocal[1]);
+    f.tipX = f.x + tx2 * s * f.facing; f.tipY = f.y + ty2 * s;
+    const [fx2, fy2] = unrot(footF[0], footF[1]);
+    f.footX = f.x + fx2 * s * f.facing; f.footY = f.y + fy2 * s;
+    const [hx3, hy3] = unrot(haF[0], haF[1]);
+    f.handX = f.x + hx3 * s * f.facing; f.handY = f.y + hy3 * s;
+  };
+
+  // ---- BESPOKE BODIES -------------------------------------------------------
+  // A character with a registered renderer is dressed entirely by it; the
+  // skeleton, squash and rotation above are shared, so every move still reads.
+  const bespoke = CUSTOM_BODIES[identity];
+  if (bespoke) {
+    const tip = bespoke(ctx, { f, L, pose, time, B, hx, hy, cy, neck, sh, head, elF, haF, elB, haB, kneeF, footF, kneeB, footB, limbW, legW });
+    publishTips(tip || haF);
+    ctx.restore();
+    if (showHit) {
+      ctx.save(); ctx.strokeStyle = 'rgba(80,255,120,0.8)'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(f.x - f.hw, f.y - f.h, f.hw * 2, f.h); ctx.restore();
+    }
+    return;
+  }
   /**
    * ULTRA INSTINCT FORM.
    * `uiForm` fighters repaint themselves in the silver crown the moment their
@@ -1358,18 +1410,7 @@ export function drawFighter(ctx: CanvasRenderingContext2D, f: any, pose: Pose, t
   ctx.beginPath(); ctx.ellipse(haF[0], haF[1], 4.1, 3.7, 0, 0, 7); ctx.fill(); ctx.stroke();
   const tip = drawWeapon(ctx, L.weapon, haF, pose.wep, f, time, false);
 
-  const tipLocal = tip || haF;
-  const unrot = (lx: number, ly: number): [number, number] => {
-    if (!pose.rot) return [lx, ly];
-    const dy = ly - cy, c = Math.cos(pose.rot), sn = Math.sin(pose.rot);
-    return [lx * c - dy * sn, lx * sn + dy * c + cy];
-  };
-  const [tx2, ty2] = unrot(tipLocal[0], tipLocal[1]);
-  f.tipX = f.x + tx2 * s * f.facing; f.tipY = f.y + ty2 * s;
-  const [fx2, fy2] = unrot(footF[0], footF[1]);
-  f.footX = f.x + fx2 * s * f.facing; f.footY = f.y + fy2 * s;
-  const [hx3, hy3] = unrot(haF[0], haF[1]);
-  f.handX = f.x + hx3 * s * f.facing; f.handY = f.y + hy3 * s;
+  publishTips(tip || haF);
 
   // ---- rim light: a thin bright contour down the leading edge of the body. It
   // is what separates a fighter from a busy arena background at any zoom.

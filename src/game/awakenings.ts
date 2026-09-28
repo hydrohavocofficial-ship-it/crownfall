@@ -63,7 +63,7 @@ export interface AwakeningProfile {
  * Power multiplier applied to a re-homed domain.
  *
  * A domain used to be the whole ultimate: a two-second root followed by five
- * seconds of unavoidable damage. Inside a fifteen-second awakened state that is
+ * seconds of unavoidable damage. Inside a thirty-second awakened state that is
  * simply too much — the gauge is meant to be a decision, not a formality. Half
  * power, and the cast is shortened, keeps the beat recognisable and the answer
  * available without letting one button decide a stock.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CHARACTERS, charById } from '../game/characters';
+import { CHARACTERS, charById, shortName } from '../game/characters';
 import { Difficulty, MatchConfig } from '../game/types';
 import { Btn, Header, ScreenBG, StatBar } from './ui';
 import Preview from './Preview';
@@ -135,7 +135,7 @@ export default function CharacterSelect({ cfg, setCfg, onNext, onBack }: Props) 
                 style={{ borderColor: cfg.player === ch.id ? FIGHTER_COLORS[0] : focus === ch.id ? '#fff' : '#000', ['--glow' as any]: FIGHTER_COLORS[0] }}>
                 <img src={ch.portrait} alt={ch.name} className="absolute inset-0 w-full h-full object-cover object-top group-hover:scale-110 transition-transform duration-300" />
                 <div className="absolute inset-0" style={{ background: `linear-gradient(180deg,transparent 45%, ${ch.color}55 78%, #000 100%)` }} />
-                <div className="absolute inset-x-0 bottom-0 pb-0.5 text-center font-display text-[11px] leading-tight tracking-wide">{ch.name.split(' ')[0].toUpperCase()}</div>
+                <div className="absolute inset-x-0 bottom-0 pb-0.5 text-center font-display text-[11px] leading-tight tracking-wide">{shortName(ch)}</div>
                 {ch.tier && <div className="absolute top-0.5 right-0.5 font-display text-[10px] px-1 bg-black/70 text-[#ffd24a] leading-tight">{ch.tier}</div>}
                 {cfg.player === ch.id && <div className="absolute top-0.5 left-0.5 font-display text-[10px] px-1 leading-tight" style={{ background: FIGHTER_COLORS[0] }}>P1</div>}
               </button>

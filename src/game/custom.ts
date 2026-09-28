@@ -71,7 +71,7 @@ export function buildCustom(cfg: CustomCfg): CharDef {
       { key: 'L · Neutral Special', name: moves.nspec.name!, desc: moves.nspec.desc || '' },
       { key: 'L · Side Special', name: moves.sspec.name!, desc: moves.sspec.desc || '' },
       { key: 'L · Down Special', name: moves.dspec.name!, desc: moves.dspec.desc || '' },
-      { key: 'R · Awaken (full gauge)', name: moves.naw.name!, desc: `${moves.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+      { key: 'R · Awaken (full gauge)', name: moves.naw.name!, desc: `${moves.naw.desc} The gauge drains from full to empty over about thirty seconds; at zero the Awakening ends.` },
       { key: 'AWAKENED · J · Light', name: moves.nwl.name!, desc: moves.nwl.desc || '' },
       { key: 'AWAKENED · K · Heavy', name: moves.nwh.name!, desc: moves.nwh.desc || '' },
       { key: 'AWAKENED · L · Special', name: moves.nfu.name!, desc: moves.nfu.desc || '' },

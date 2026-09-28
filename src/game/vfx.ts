@@ -752,7 +752,15 @@ export function sukunaCuts(g: any, f: any, m: any, b: { x: number; y: number; w:
   }
 }
 
+/** Per-move visual owned entirely by a bespoke character module. */
+export type CustomVfx = (f: any, g: any, fr: number, m: any) => void;
+const CUSTOM_VFX: Record<string, CustomVfx> = {};
+/** Registers a move visual that replaces the generic strike/swing pass. */
+export function registerVfx(name: string, fn: CustomVfx) { CUSTOM_VFX[name] = fn; }
+
 export function runVfx(name: string | undefined, f: any, g: any, fr: number, m: any) {
+  const own = name ? CUSTOM_VFX[name] : undefined;
+  if (own) { own(f, g, fr, m); return; }
   const id = f.def?.styleId || f.def?.id;
   const boss = id === 'sukuna' || id === 'gojo';
   const profile = AWAKENINGS[id];

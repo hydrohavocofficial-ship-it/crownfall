@@ -216,7 +216,7 @@ export class Fighter {
     if (this.def.uiForm && m.ability === 'awaken') this.godT = Math.max(this.godT, 220);
     // A retained set-piece earns a short cinematic. It is the one place the
     // engine still stops the world, and it is now behind a cooldown and a
-    // fifteen-second window rather than a spent bar.
+    // thirty-second window rather than a spent bar.
     if (m.cin && m.ability === 'awakened' && this.grounded) g.cinematic(this, m.name, m.cin);
     this.applyVel(0);
     m.onStart?.(this, g);
@@ -333,7 +333,7 @@ export class Fighter {
    *
    * It is its own method because the engine also calls it while a cinematic is
    * holding the screen: a set-piece that stops the world must not stop the
-   * fifteen seconds the HUD is still promising.
+   * thirty seconds the HUD is still promising.
    */
   drainAwaken() {
     if (!this.awakened) return;

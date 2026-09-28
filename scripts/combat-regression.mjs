@@ -906,28 +906,37 @@ try {
     until(g, () => f.moveKey === null, 300);
     assert.ok(f.awakened, 'a full gauge did not open the Awakening');
     const start = f.meter;
-    // Fifteen seconds of gauge, spent whether or not it is being used.
+    // Thirty seconds of gauge, spent whether or not it is being used.
     let frames = 0;
-    while (f.awakened && frames < 1200) { tick(g); frames++; }
+    while (f.awakened && frames < 2400) { tick(g); frames++; }
     assert.equal(f.awakened, false, `the Awakening was still open after ${frames} frames`);
     assert.equal(f.meter, 0, `the gauge ended at ${f.meter}`);
-    assert.ok(frames > 700 && frames < 1100, `one Awakening lasted ${(frames / 60).toFixed(1)}s`);
+    assert.ok(frames > 1500 && frames < 2100, `one Awakening lasted ${(frames / 60).toFixed(1)}s`);
     assert.ok(start < 100, 'the gauge was not clamped below full on entry');
     // And the buttons point at the base moveset again.
     tick(g, [DEFAULT_BINDINGS.heavy[0]]);
     assert.equal(f.moveKey, 'nlight_heavy' in f.def.moves ? f.moveKey : 'nlight_heavy');
   });
 
-  test('awakening: a knockout while Awakened takes the whole state', () => {
+  test('awakening: a knockout ends the state but keeps the gauge', () => {
     const g = game('levi');
     const [f] = g.fighters;
     f.meter = 100;
     tick(g, [DEFAULT_BINDINGS.awaken[0]]);
     until(g, () => f.moveKey === null, 300);
     assert.ok(f.awakened);
+    frames(g, 120);
+    const left = f.meter;
+    assert.ok(left > 0 && left < 100, `unexpected gauge before the knockout: ${left}`);
     g.ko(f);
     assert.equal(f.awakened, false, 'the state survived a knockout');
-    assert.equal(f.meter, 0, `the gauge survived a knockout at ${f.meter}`);
+    close(f.meter, left, 'gauge kept through the knockout');
+    g.respawn(f);
+    close(f.meter, left, 'gauge kept through the respawn');
+    assert.equal(f.awakened, false, 'respawn handed the state straight back');
+    // Banked charge that was never spent survives a knockout too.
+    f.meter = 63; g.ko(f); g.respawn(f);
+    close(f.meter, 63, 'banked charge kept through a knockout');
     // Nothing is left on cooldown either: the next stock starts clean.
     for (const key of ['naw', 'nfu', 'nwh', 'nwl']) assert.equal(f.cds[key], 0, `${key} survived the knockout`);
   });

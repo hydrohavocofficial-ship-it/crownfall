@@ -1,5 +1,5 @@
 import { ARENAS, ArenaDef, PREVIEW_ARENA, arenaById } from './arenas';
-import { CHARACTERS, charById, MoveKey } from './characters';
+import { CHARACTERS, charById, shortName, MoveKey } from './characters';
 import { Fighter } from './fighter';
 import { AI } from './ai';
 import { Effects } from './effects';
@@ -1080,8 +1080,9 @@ export class Game {
     f.sukunaFlash = 0; f.sukunaBlackFlash = false; f.sukunaLaunchTarget = null; f.sukunaGrabTarget = null; f.koCueFired = false; f.laughCueFired = false;
     f.standT = 0; f.standDur = 0; f.standAttackT = 0; f.standActive = false; f.frozen = false;
     // Respawning is not a fresh awakening: a fighter who fell mid-state comes back
-    // sealed, with an empty bar and a clean set of cooldowns.
-    f.awakened = false; f.meter = 0; f.awakenLock = 0; f.juggleLeft = JUGGLE_BUDGET;
+    // out of the state with a clean set of cooldowns - but the gauge they had
+    // built is kept exactly where it was (see `ko`).
+    f.awakened = false; f.awakenLock = 0; f.juggleLeft = JUGGLE_BUDGET;
     for (const key of Object.keys(f.cds)) f.cds[key] = 0;
     this.fx.ring(f.x, f.y - 40, 10, 70, f.color, 24, 6);
     this.fx.burst(f.x, f.y - 40, 20, f.color, 6, 'glow', 26, 5);
@@ -1092,11 +1093,14 @@ export class Game {
     // A stopped world cannot outlive the fighter holding it: release the queued
     // damage and let normal time resume.
     if (this.timeStop.active && this.timeStop.owner === f) this.endTimeStop();
-    // Falling in an Awakening costs the whole thing. The gauge was spent, the
-    // state is gone, and the bar goes to zero rather than keeping whatever was
-    // left of the drain - otherwise a knockout with nine points showing would
-    // hand the Awakening straight back on respawn and make dying in it free.
+    // A knockout ends the awakened *state*, but never wipes the *bar*. Whatever
+    // gauge was showing - banked charge, or what was left of an Awakening's
+    // drain - comes back with the fighter on the next stock. Re-awakening still
+    // needs a full bar, so a knockout mid-state can never hand the state
+    // straight back; it just means the effort spent building it is not lost.
+    const keptGauge = f.meter;
     f.endAwaken();
+    f.meter = keptGauge;
     f.awakenLock = 0;
     f.juggleLeft = JUGGLE_BUDGET;
     for (const key of AWAKEN_MOVES) f.cds[key] = 0;
@@ -1473,7 +1477,7 @@ export class Game {
     d.damage = 40; d.meter = 100;
     // The two Awakening showcases spend a gauge, so the gauge is full. The
     // preview keeps it there, because a showcase that ends when the meter does
-    // is not showing the fifteen seconds it is meant to be showing.
+    // is not showing the thirty seconds it is meant to be showing.
     if (request.action === 'awaken' || request.action === 'awakened') { f.meter = 100; this.infiniteMeter = true; }
     if (request.stance === 'air') { f.grounded = false; f.state = 'air'; f.vy = 0; d.grounded = false; d.state = 'air'; }
 
@@ -2059,7 +2063,7 @@ export class Game {
       ctx.fillText(f.label, 88, 20);
       if (this.teamMode) { ctx.font = 'bold 10px Rajdhani, sans-serif'; ctx.fillText(TEAM_NAMES[this.teamOf(f)], 14, 90); }
       ctx.fillStyle = '#ddd'; ctx.font = '600 12px Rajdhani, sans-serif';
-      ctx.fillText(f.def.name.split(' ')[0].toUpperCase(), 88 + ctx.measureText(f.label + '  ').width + 6, 20);
+      ctx.fillText(shortName(f.def), 88 + ctx.measureText(f.label + '  ').width + 6, 20);
       // damage
       const hp = this.health.get(f);
       const dmg = hp ? Math.ceil(hp.current) : Math.round(f.damage);

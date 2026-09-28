@@ -181,12 +181,15 @@ export const GAIN_ON_TAKE = 0.13;
 /**
  * Gauge drained per frame while awakened.
  *
- * 100 / 0.11 = 909 frames = 15.1 seconds. Long enough that spending the gauge
- * is a decision about the whole stock, short enough that it cannot be hoarded
- * into an unbeatable state, and slow enough on screen to read as a resource
- * being spent rather than a bar being drained.
+ * 100 / 0.055 = 1818 frames = 30.3 seconds. Long enough that an Awakening
+ * is a real phase of the fight you get to play in rather than a burst, short
+ * enough that it cannot be hoarded into an unbeatable state, and slow enough
+ * on screen to read as a resource being spent rather than a bar being drained.
  */
-export const GAUGE_DRAIN = 0.11;
+export const GAUGE_DRAIN = 0.055;
+
+/** Whole seconds one full Awakening lasts, for the HUD and the move list. */
+export const AWAKEN_SECONDS = Math.round(100 / GAUGE_DRAIN / 60);
 
 /** Frames the awakening activation itself locks out after the gauge fills. */
 export const AWAKEN_LOCKOUT = 420;

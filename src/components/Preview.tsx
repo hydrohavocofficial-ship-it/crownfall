@@ -112,7 +112,7 @@ export default function Preview({ charId, color }: { charId: string; color: stri
           )}
           <button onClick={() => { const next = !auto; autoRef.current = next; setAuto(next); }} className={`px-2 py-1 border cursor-pointer ${auto ? 'border-[#ffb52e] text-[#ffb52e]' : 'border-white/20 text-white/50'}`}>AUTO {auto ? 'ON' : 'OFF'}</button>
         </div>
-        <div className="mt-1 text-[8px] leading-tight text-white/45">Close moves auto-place the dummy in hit range. AWAKENED shows the second kit you get for fifteen seconds once the gauge is spent; the set-piece is halved.</div>
+        <div className="mt-1 text-[8px] leading-tight text-white/45">Close moves auto-place the dummy in hit range. AWAKENED shows the second kit you get for thirty seconds once the gauge is spent; the set-piece is halved.</div>
       </div>
     </div>
   );

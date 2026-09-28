@@ -180,6 +180,28 @@ export function sfx(name: string, power = 1) {
     case 'gojo-void':
       [220, 329.6, 440, 659.2].forEach((f, i) => tone(f, 1.15, 'sine', .075, f * .5, i * .075));
       noise(.9, .1, 5800, 'highpass', 900); tone(42, 1.2, 'sine', .32, 28); break;
+    // ---- W. D. Gaster ----
+    case 'blaster-charge':
+      tone(220, .32, 'sawtooth', .07, 1320); tone(223, .32, 'square', .04, 1330);
+      noise(.3, .12, 900, 'bandpass', 5200, 0, 4); break;
+    case 'blaster-fire':
+      noise(.55, .42, 2600, 'lowpass', 300); tone(95, .55, 'sawtooth', .22, 48);
+      tone(1400, .3, 'square', .05, 700); tone(52, .7, 'sine', .45, 30, .05); break;
+    case 'glitch':
+      for (let i = 0; i < 4; i++) tone(300 + ((i * 677) % 1900), .03, 'square', .07, undefined, i * .028);
+      noise(.1, .16, 5200, 'highpass', 1800); break;
+    case 'soul':
+      [523.3, 659.3, 784, 1046.5].forEach((f, i) => tone(f, .32, 'sine', .07, f * 1.01, i * .035)); break;
+    case 'void':
+      tone(70, .5, 'sine', .3, 34); noise(.45, .18, 380, 'lowpass', 90); tone(420, .3, 'triangle', .05, 110, .05); break;
+    // ---- Donquixote Doflamingo ----
+    case 'string':
+      tone(2400, .06, 'triangle', .07, 900); noise(.07, .24, 7800, 'highpass', 3000, 0, 4); break;
+    case 'string-whip':
+      noise(.16, .34, 3000, 'bandpass', 9000, 0, 3); tone(1800, .12, 'sawtooth', .05, 260); break;
+    case 'birdcage':
+      for (let i = 0; i < 6; i++) tone(1800 - i * 160, .5, 'triangle', .04, 1700 - i * 160, i * .05);
+      noise(.8, .18, 6000, 'highpass', 1500); tone(60, .9, 'sine', .3, 30); break;
     case 'blade-cut': noise(.09, .3, 4800, 'bandpass', 1100, 0, 3); tone(1800, .1, 'triangle', .06, 620); break;
     case 'storm-strike': for (let i = 0; i < 3; i++) { tone(1500 + i * 340, .045, 'square', .06, 180, i * .025); } noise(.1, .2, 6800, 'highpass'); break;
     case 'flame-strike': noise(.24, .32, 1000, 'lowpass', 240); tone(120, .16, 'sawtooth', .09, 45); break;

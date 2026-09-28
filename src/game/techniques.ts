@@ -265,7 +265,7 @@ function domainSpecial(base: MoveDef, a: AwakeningProfile, profileId: string, st
     chainLabel: CHAIN_LABEL.awakened,
     cd: 300,
     // The old ultimate's armour was balanced around being a one-button, meter-
-    // gated super. A fifteen-second awakening is not that, so the immunity is
+    // gated super. A thirty-second awakening is not that, so the immunity is
     // shortened to a startup window and the body is free to be punished after.
     invuln: base.invuln ? [0, Math.min(base.invuln[1], cast + 6)] : undefined,
     onStart: (f, g) => { f.auraT = Math.max(f.auraT, 40); base.onStart?.(f, g); },

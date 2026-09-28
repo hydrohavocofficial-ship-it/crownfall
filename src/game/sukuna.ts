@@ -214,7 +214,7 @@ const abilities = [
   { key: 'L · Forward Special', name: generated.sspec.name!, desc: generated.sspec.desc! },
   { key: 'L · Down Special', name: generated.dspec.name!, desc: generated.dspec.desc! },
   { key: 'L · Aerial Special', name: 'Fuga', desc: generated.aspec.desc! },
-  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about fifteen seconds; at zero the Awakening ends.` },
+  { key: 'R · Awaken (full gauge)', name: generated.naw.name!, desc: `${generated.naw.desc} The gauge drains from full to empty over about thirty seconds; at zero the Awakening ends.` },
   { key: 'AWAKENED · J · Light', name: generated.nwl.name!, desc: generated.nwl.desc! },
   { key: 'AWAKENED · K · Heavy', name: generated.nwh.name!, desc: generated.nwh.desc! },
   { key: 'AWAKENED · L · Shrine', name: generated.nfu.name!, desc: generated.nfu.desc! },
